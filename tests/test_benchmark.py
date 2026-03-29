@@ -28,10 +28,6 @@ class AgentBenchSmokeTests(unittest.TestCase):
     def test_reference_agent_smoke_suite(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "runs"
-            command = (
-                "python examples/agents/reference_agent.py "
-                "--task {task_file} --workspace {workspace} --result {result_file}"
-            )
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -44,8 +40,8 @@ class AgentBenchSmokeTests(unittest.TestCase):
                     "workflow.support_refund",
                     "--seed",
                     "11",
-                    "--agent-command",
-                    command,
+                    "--agent-python",
+                    "examples/agents/reference_agent.py",
                     "--json",
                 ],
                 cwd=ROOT,
@@ -61,10 +57,6 @@ class AgentBenchSmokeTests(unittest.TestCase):
     def test_reference_agent_repo_patch_task(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "runs"
-            command = (
-                "python examples/agents/reference_agent.py "
-                "--task {task_file} --workspace {workspace} --result {result_file}"
-            )
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -77,8 +69,8 @@ class AgentBenchSmokeTests(unittest.TestCase):
                     "repo.timezone_window",
                     "--seed",
                     "11",
-                    "--agent-command",
-                    command,
+                    "--agent-python",
+                    "examples/agents/reference_agent.py",
                     "--json",
                 ],
                 cwd=ROOT,
@@ -90,6 +82,51 @@ class AgentBenchSmokeTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn('"passed": 1', completed.stdout)
             self.assertTrue((output_dir / "latest" / "summary.md").exists())
+
+    def test_prepare_and_init_adapter_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            adapter_path = Path(temp_dir) / "adapters" / "my_agent.py"
+            prepared_dir = Path(temp_dir) / "prepared"
+            init_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "init-adapter",
+                    "--output",
+                    str(adapter_path),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(init_completed.returncode, 0, init_completed.stderr)
+            self.assertTrue(adapter_path.exists())
+
+            prepare_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "prepare",
+                    "--task",
+                    "data.margin_hotspots",
+                    "--seed",
+                    "11",
+                    "--output-dir",
+                    str(prepared_dir),
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(prepare_completed.returncode, 0, prepare_completed.stderr)
+            self.assertIn('"task_id": "data.margin_hotspots"', prepare_completed.stdout)
 
 
 if __name__ == "__main__":

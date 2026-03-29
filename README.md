@@ -35,7 +35,7 @@ Run the core suite against the bundled reference agent:
 
 ```bash
 agentbench run ^
-  --agent-command "python examples/agents/reference_agent.py --task {task_file} --workspace {workspace} --result {result_file}"
+  --agent-python examples/agents/reference_agent.py
 ```
 
 Run only one task with a specific seed:
@@ -44,7 +44,7 @@ Run only one task with a specific seed:
 agentbench run ^
   --task workflow.support_refund ^
   --seed 11 ^
-  --agent-command "python examples/agents/reference_agent.py --task {task_file} --workspace {workspace} --result {result_file}"
+  --agent-python examples/agents/reference_agent.py
 ```
 
 Pretty-print a generated report:
@@ -52,6 +52,64 @@ Pretty-print a generated report:
 ```bash
 agentbench report --summary runs/latest/summary.json
 ```
+
+Prepare one episode so you can inspect the workspace or point your own agent at it manually:
+
+```bash
+agentbench prepare ^
+  --task workflow.support_refund ^
+  --seed 11
+```
+
+Scaffold a Python adapter for your own agent:
+
+```bash
+agentbench init-adapter --output adapters/my_agent.py
+```
+
+## Testing your own agent
+
+There are now two straightforward integration paths.
+
+### 1. Python adapter mode
+
+If your agent can be wrapped in Python, generate a scaffold and plug your runtime into it:
+
+```bash
+agentbench init-adapter --output adapters/my_agent.py
+agentbench run --agent-python adapters/my_agent.py
+```
+
+Your adapter receives:
+
+- `--task`: path to the public task manifest
+- `--workspace`: the directory your agent should operate inside
+- `--result`: where to write `agent_result.json`
+- `--prompt`: the generated task prompt
+
+The helper API in `agentbench.adapters` gives you:
+
+- `load_context(...)` to read the task contract
+- `write_result(...)` to emit a valid final result file
+
+### 2. Existing command-based agent
+
+If your agent is already exposed as a CLI, you can still use the raw command-template mode:
+
+```bash
+agentbench run ^
+  --agent-command "my-agent-cli --task {task_file} --workspace {workspace} --result {result_file} --prompt {prompt_file}"
+```
+
+### Manual debugging flow
+
+If you are integrating a new agent and want to inspect a task first:
+
+```bash
+agentbench prepare --task repo.timezone_window --seed 11
+```
+
+That materializes the workspace, prompt, task file, and expected result path so you can debug your agent outside the full benchmark loop.
 
 ## Benchmark dimensions
 

@@ -28,6 +28,13 @@ def expand_tasks(suite: SuiteSpec, task_filter: str | None, explicit_seeds: list
     return episodes
 
 
+def find_task(suite: SuiteSpec, task_id: str):
+    for task in suite.tasks:
+        if task.id == task_id:
+            return task
+    raise KeyError(f"Unknown task id: {task_id}")
+
+
 def _link_latest(output_root: Path, run_dir: Path) -> None:
     latest = output_root / "latest"
     if latest.exists() or latest.is_symlink():
@@ -146,6 +153,25 @@ def run_suite(
     (run_dir / "summary.md").write_text(render_summary_markdown(summary), encoding="utf-8")
     _link_latest(output_root, run_dir)
     return summary
+
+
+def prepare_task(suite_path: Path, task_id: str, seed: int, output_dir: Path) -> dict:
+    suite = load_suite(suite_path)
+    task = find_task(suite, task_id)
+    prepared_root = ensure_dir(output_dir / sanitize_name(f"{task.id}-seed{seed}"))
+    family = get_family(task.family)
+    prepared = family.prepare(task, seed, prepared_root)
+    manifest = {
+        "suite": suite.name,
+        "task_id": task.id,
+        "seed": seed,
+        "workspace": str(prepared.workspace),
+        "task_file": str(prepared.task_file),
+        "prompt_file": str(prepared.prompt_path),
+        "result_file": str(prepared.result_file),
+    }
+    write_json(prepared_root / "prepared.json", manifest)
+    return manifest
 
 
 def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: list[EpisodeResult]) -> dict:

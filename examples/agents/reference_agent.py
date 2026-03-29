@@ -6,10 +6,7 @@ import json
 import subprocess
 from pathlib import Path
 
-
-def read_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
+from agentbench.adapters import load_context, write_result
 
 def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -20,11 +17,17 @@ def main() -> int:
     parser.add_argument("--task", required=True)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--result", required=True)
+    parser.add_argument("--prompt", required=False)
     args = parser.parse_args()
 
-    task = read_json(Path(args.task))
-    workspace = Path(args.workspace)
-    result_path = Path(args.result)
+    context = load_context(
+        task_file=args.task,
+        workspace=args.workspace,
+        result_file=args.result,
+        prompt_file=args.prompt,
+    )
+    task = context.task
+    workspace = context.workspace
     artifacts: list[str] = []
 
     if task["family"] == "repo_patch":
@@ -160,13 +163,11 @@ def main() -> int:
             )
             artifacts.append("incident_report.md")
 
-    write_json(
-        result_path,
-        {
-            "summary": f"Reference agent completed {task['id']}.",
-            "confidence": 0.98,
-            "artifacts": artifacts,
-        },
+    write_result(
+        result_file=context.result_file,
+        summary=f"Reference agent completed {task['id']}.",
+        confidence=0.98,
+        artifacts=artifacts,
     )
     return 0
 

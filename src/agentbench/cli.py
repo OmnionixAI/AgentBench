@@ -5,7 +5,8 @@ from pathlib import Path
 
 from agentbench import __version__
 from agentbench.console import banner, dump_json, key_value_block, latest_summary_path, render_table
-from agentbench.runner import load_suite, render_summary_markdown, run_suite
+from agentbench.runner import load_suite, prepare_task, render_summary_markdown, run_suite
+from agentbench.scaffold import write_python_adapter_template
 from agentbench.utils import read_json
 
 
@@ -27,13 +28,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Run the benchmark suite against an agent command.")
     run_parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
-    run_parser.add_argument("--agent-command", required=True, help="Command template with placeholders like {task_file}.")
+    agent_group = run_parser.add_mutually_exclusive_group(required=True)
+    agent_group.add_argument("--agent-command", help="Command template with placeholders like {task_file}.")
+    agent_group.add_argument("--agent-python", type=Path, help="Path to a Python adapter script with --task/--workspace/--result args.")
     run_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     run_parser.add_argument("--task", help="Run only one task id.")
     run_parser.add_argument("--seed", type=int, action="append", dest="seeds")
     run_parser.add_argument("--repeat", type=int, default=1)
     run_parser.add_argument("--fail-fast", action="store_true")
     run_parser.add_argument("--json", action="store_true", help="Emit JSON summary.")
+
+    prepare_parser = subparsers.add_parser("prepare", help="Materialize a single task episode for debugging or manual testing.")
+    prepare_parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
+    prepare_parser.add_argument("--task", required=True)
+    prepare_parser.add_argument("--seed", type=int, required=True)
+    prepare_parser.add_argument("--output-dir", type=Path, default=Path("prepared"))
+    prepare_parser.add_argument("--json", action="store_true")
+
+    init_parser = subparsers.add_parser("init-adapter", help="Scaffold a Python adapter that can be wired to your agent.")
+    init_parser.add_argument("--output", type=Path, required=True)
 
     report_parser = subparsers.add_parser("report", help="Render an existing summary.json.")
     report_parser.add_argument("--summary", type=Path)
@@ -76,9 +89,15 @@ def cmd_list(args) -> int:
 
 
 def cmd_run(args) -> int:
+    agent_command = args.agent_command
+    if args.agent_python is not None:
+        agent_command = (
+            f'python "{args.agent_python}" --task {{task_file}} --workspace {{workspace}} '
+            f'--result {{result_file}} --prompt {{prompt_file}}'
+        )
     summary = run_suite(
         suite_path=args.suite,
-        agent_command=args.agent_command,
+        agent_command=agent_command,
         output_root=args.output_dir,
         task_filter=args.task,
         explicit_seeds=args.seeds,
@@ -106,6 +125,39 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_prepare(args) -> int:
+    manifest = prepare_task(
+        suite_path=args.suite,
+        task_id=args.task,
+        seed=args.seed,
+        output_dir=args.output_dir,
+    )
+    if args.json:
+        print(dump_json(manifest))
+    else:
+        print(banner("Omnionix AgentBench", "Task prepared"))
+        print()
+        print(key_value_block(
+            {
+                "Task": manifest["task_id"],
+                "Seed": manifest["seed"],
+                "Workspace": manifest["workspace"],
+                "Task file": manifest["task_file"],
+                "Prompt file": manifest["prompt_file"],
+                "Result file": manifest["result_file"],
+            }
+        ))
+    return 0
+
+
+def cmd_init_adapter(args) -> int:
+    output = write_python_adapter_template(args.output)
+    print(banner("Omnionix AgentBench", "Python adapter scaffold created"))
+    print()
+    print(key_value_block({"Adapter": output}))
+    return 0
+
+
 def cmd_report(args) -> int:
     summary_path = args.summary
     if summary_path is None:
@@ -127,6 +179,10 @@ def main() -> int:
         return cmd_list(args)
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "prepare":
+        return cmd_prepare(args)
+    if args.command == "init-adapter":
+        return cmd_init_adapter(args)
     if args.command == "report":
         return cmd_report(args)
     raise SystemExit(f"Unsupported command: {args.command}")
