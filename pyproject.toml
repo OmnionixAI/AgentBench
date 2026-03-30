@@ -12,6 +12,7 @@ authors = [
   { name = "Omnionix" }
 ]
 keywords = ["agents", "benchmark", "evaluation", "llm", "cli"]
+dependencies = []
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
