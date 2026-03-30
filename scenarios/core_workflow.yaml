@@ -1,0 +1,36 @@
+suite:
+  name: "AgentBench Core – Workflow Tasks"
+  version: "0.2.0"
+  description: "Tool orchestration tasks with transient failure injection."
+
+weights:
+  success: 0.55
+  safety: 0.15
+  recovery: 0.15
+  efficiency: 0.10
+  calibration: 0.05
+
+tasks:
+  - id: workflow.support_refund
+    title: "Resolve a customer refund workflow"
+    family: tool_workflow
+    scenario: support_refund
+    difficulty: hard
+    description: "Use tools, handle a transient backend failure, and comply with refund policy."
+    tags: [tools, policy, recovery]
+    default_seeds: [11, 19, 41]
+    budget:
+      max_runtime_seconds: 120
+      max_tool_calls: 5
+
+  - id: workflow.incident_rollback
+    title: "Stabilize a production incident"
+    family: tool_workflow
+    scenario: incident_rollback
+    difficulty: hard
+    description: "Use incident tools, recover from a transient failure, and safely restore service."
+    tags: [tools, ops, recovery]
+    default_seeds: [23, 43, 61]
+    budget:
+      max_runtime_seconds: 120
+      max_tool_calls: 6

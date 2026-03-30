@@ -10,7 +10,8 @@ from agentbench.scaffold import write_python_adapter_template
 from agentbench.utils import read_json
 
 
-DEFAULT_SUITE = Path("benchmarks/core.json")
+DEFAULT_SUITE = Path("scenarios")
+DEFAULT_SUITE_FALLBACK = Path("benchmarks/core.json")
 DEFAULT_OUTPUT = Path("runs")
 
 
@@ -41,6 +42,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--repeat", type=int, default=1)
     run_parser.add_argument("--fail-fast", action="store_true")
     run_parser.add_argument("--json", action="store_true", help="Emit JSON summary.")
+    run_parser.add_argument("--chaos", action="store_true", help="Enable chaos failure injection for supported scenarios.")
+    run_parser.add_argument("--chaos-rate", type=float, default=0.15, help="Failure probability for chaos injection (default: 0.15).")
+    run_parser.add_argument("--cost-model", default=None, help="Token pricing model name (e.g. gpt-4o, claude-sonnet-4).")
+    run_parser.add_argument("-v", "--verbose", action="store_true", help="Include trajectory and cost details in console output.")
 
     prepare_parser = subparsers.add_parser("prepare", help="Materialize a single task episode for debugging or manual testing.")
     prepare_parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
@@ -59,8 +64,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resolve_suite(suite_arg: Path) -> Path:
+    """Fall back to benchmarks/core.json if the scenarios/ directory doesn't exist."""
+    if suite_arg.exists():
+        return suite_arg
+    if suite_arg == DEFAULT_SUITE and DEFAULT_SUITE_FALLBACK.exists():
+        return DEFAULT_SUITE_FALLBACK
+    return suite_arg  # let load_suite raise on missing
+
+
 def cmd_list(args) -> int:
-    suite = load_suite(args.suite)
+    suite = load_suite(_resolve_suite(args.suite))
     payload = {
         "suite": suite.name,
         "version": suite.version,
@@ -95,7 +109,7 @@ def cmd_list(args) -> int:
 def cmd_run(args) -> int:
     agent_command = build_agent_command(args)
     summary = run_suite(
-        suite_path=args.suite,
+        suite_path=_resolve_suite(args.suite),
         agent_command=agent_command,
         output_root=args.output_dir,
         task_filter=args.task,
@@ -108,19 +122,22 @@ def cmd_run(args) -> int:
     else:
         print(banner("Omnionix AgentBench", "Run complete"))
         print()
-        print(
-            key_value_block(
-                {
-                    "Suite": summary["suite"]["name"],
-                    "Episodes": summary["episodes"],
-                    "Passed": summary["passed"],
-                    "Failed": summary["failed"],
-                    "Average overall": summary["averages"].get("overall", 0.0),
-                    "Consistency": summary["consistency"] if summary["consistency"] is not None else "n/a",
-                    "Run dir": summary["run_dir"],
-                }
-            )
-        )
+        info = {
+            "Suite": summary["suite"]["name"],
+            "Episodes": summary["episodes"],
+            "Passed": summary["passed"],
+            "Failed": summary["failed"],
+            "Average overall": summary["averages"].get("overall", 0.0),
+            "Consistency": summary["consistency"] if summary["consistency"] is not None else "n/a",
+            "Run dir": summary["run_dir"],
+        }
+        # FinOps fields (only shown if agents reported costs)
+        finops = summary.get("finops", {})
+        if finops and finops.get("total_cost_usd") is not None:
+            info["Total cost (USD)"] = f"${finops['total_cost_usd']:.6f}"
+            info["Cost/success"] = f"${finops['cost_per_task_success']:.6f}" if finops.get("cost_per_task_success") is not None else "n/a"
+            info["Efficiency score"] = finops.get("avg_efficiency_score", "n/a")
+        print(key_value_block(info))
     return 0
 
 

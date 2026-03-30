@@ -8,13 +8,19 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from agentbench.finops import compute_cost, cost_per_task_success, efficiency_score, parse_token_report
 from agentbench.models import EpisodeResult, SuiteSpec
 from agentbench.registry import get_family
 from agentbench.scoring import consistency_score
+from agentbench.trajectory import Trajectory
 from agentbench.utils import ensure_dir, read_json, sanitize_name, write_json
 
 
 def load_suite(path: Path) -> SuiteSpec:
+    """Load a suite from JSON, YAML, or a directory of scenario files."""
+    if path.is_dir() or path.suffix in (".yaml", ".yml"):
+        from agentbench.scenario_loader import load_auto
+        return load_auto(path)
     return SuiteSpec.from_dict(read_json(path))
 
 
@@ -119,6 +125,36 @@ def run_suite(
             duration = time.perf_counter() - start
             stdout_path.write_text(completed.stdout, encoding="utf-8")
             stderr_path.write_text(completed.stderr, encoding="utf-8")
+
+            # --- Trajectory tracking (best-effort) ---
+            trajectory = Trajectory()
+            trajectory.add("start", f"Starting {task.id} seed={seed} run={iteration}")
+            for line in completed.stdout.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("[THOUGHT]"):
+                    trajectory.add("thought", stripped[9:].strip())
+                elif stripped.startswith("[TOOL_CALL]"):
+                    trajectory.add("tool_call", stripped[11:].strip())
+                elif stripped.startswith("[OBSERVATION]"):
+                    trajectory.add("observation", stripped[13:].strip())
+                elif stripped.startswith("[ERROR]"):
+                    trajectory.add("error", stripped[7:].strip())
+                else:
+                    trajectory.add("observation", stripped)
+            trajectory.add("finish", f"exit_code={completed.returncode} duration={duration:.2f}s")
+            write_json(episode_dir / "trajectory.json", trajectory.to_list())
+
+            # --- FinOps: parse optional token report ---
+            token_report = parse_token_report(
+                workspace=prepared.workspace,
+                stdout=completed.stdout,
+            )
+            episode_cost: float | None = None
+            if token_report is not None:
+                episode_cost = compute_cost(token_report)
+
             evaluation = family.evaluate(
                 prepared=prepared,
                 suite_weights=suite.weights,
@@ -138,6 +174,7 @@ def run_suite(
                     "passed": evaluation.passed,
                     "notes": evaluation.notes,
                     "details": evaluation.details,
+                    "cost_usd": episode_cost,
                 },
             )
             results.append(
@@ -151,6 +188,8 @@ def run_suite(
                     stdout_path=stdout_path,
                     stderr_path=stderr_path,
                     evaluation=evaluation,
+                    trajectory=trajectory.to_list(),
+                    cost_usd=episode_cost,
                 )
             )
             if fail_fast and not evaluation.passed:
@@ -188,6 +227,8 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
     aggregates: dict[str, list[float]] = defaultdict(list)
     totals_by_task: dict[str, list[float]] = defaultdict(list)
     per_task: list[dict] = []
+    total_cost = 0.0
+    costs_available = False
 
     for result in results:
         for dimension, score in result.evaluation.scores.items():
@@ -195,6 +236,9 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
                 aggregates[dimension].append(float(score))
         aggregates["overall"].append(float(result.evaluation.overall))
         totals_by_task[result.task_id].append(float(result.evaluation.overall))
+        if result.cost_usd is not None:
+            total_cost += result.cost_usd
+            costs_available = True
         per_task.append(
             {
                 "task_id": result.task_id,
@@ -211,6 +255,7 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
                 "workspace": str(result.workspace),
                 "stdout_path": str(result.stdout_path),
                 "stderr_path": str(result.stderr_path),
+                "cost_usd": result.cost_usd,
             }
         )
 
@@ -222,6 +267,20 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
     consistency_values = [
         value for value in (consistency_score(series) for series in totals_by_task.values()) if value is not None
     ]
+
+    # FinOps summary fields
+    passed_count = sum(1 for result in results if result.evaluation.passed)
+    finops: dict[str, float | None] = {
+        "total_cost_usd": round(total_cost, 6) if costs_available else None,
+        "cost_per_task_success": round(cost_per_task_success(total_cost, passed_count), 6) if costs_available else None,
+        "avg_efficiency_score": None,
+    }
+    if costs_available and results:
+        avg_overall = averages.get("overall", 0.0)
+        avg_duration = sum(r.duration_seconds for r in results) / len(results)
+        avg_cost = total_cost / len(results) if len(results) > 0 else 0.0001
+        finops["avg_efficiency_score"] = efficiency_score(avg_overall, avg_cost, avg_duration)
+
     return {
         "suite": {
             "name": suite.name,
@@ -232,10 +291,11 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
         },
         "run_dir": str(run_dir),
         "episodes": len(results),
-        "passed": sum(1 for result in results if result.evaluation.passed),
+        "passed": passed_count,
         "failed": sum(1 for result in results if not result.evaluation.passed),
         "averages": averages,
         "consistency": None if not consistency_values else round(sum(consistency_values) / len(consistency_values), 4),
+        "finops": finops,
         "tasks": per_task,
     }
 

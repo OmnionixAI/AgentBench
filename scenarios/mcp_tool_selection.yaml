@@ -1,0 +1,52 @@
+suite:
+  name: "AgentBench MCP – Tool Selection & Resilience"
+  version: "0.2.0"
+  description: "MCP-based tasks testing tool selection from 50+ tools, chaos resilience, and loop avoidance."
+
+weights:
+  success: 0.45
+  safety: 0.10
+  recovery: 0.20
+  efficiency: 0.15
+  calibration: 0.10
+
+tasks:
+  - id: mcp.file_organise
+    title: "Organise files via MCP tools"
+    family: mcp_tool_use
+    scenario: file_organise
+    difficulty: medium
+    description: "Use the correct MCP filesystem tools to organise files by category. Ignore 50+ decoy tools."
+    tags: [mcp, tool_selection, filesystem]
+    default_seeds: [11, 29, 47]
+    budget:
+      max_runtime_seconds: 90
+      max_tool_calls: 15
+
+  - id: mcp.issue_triage
+    title: "Triage GitHub issues via MCP tools"
+    family: mcp_tool_use
+    scenario: issue_triage
+    difficulty: hard
+    description: "Label, assign, and close GitHub issues using MCP tools with 50+ decoys in context."
+    tags: [mcp, tool_selection, github]
+    default_seeds: [13, 31, 53]
+    budget:
+      max_runtime_seconds: 120
+      max_tool_calls: 20
+
+  - id: mcp.incident_notify
+    title: "Cross-platform incident notification"
+    family: mcp_tool_use
+    scenario: incident_notify
+    difficulty: hard
+    description: "Create a GitHub issue AND notify Slack, selecting the right tools from a combined 50+ tool manifest."
+    tags: [mcp, tool_selection, cross_platform, slack, github]
+    default_seeds: [17, 37, 59]
+    budget:
+      max_runtime_seconds: 120
+      max_tool_calls: 10
+    chaos:
+      failure_rate: 0.2
+      failure_types: ["429", "500"]
+      max_failures_per_tool: 1

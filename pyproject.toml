@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentbench"
-version = "0.1.0"
+version = "0.2.0"
 description = "Omnionix AgentBench: a dynamic benchmark harness for evaluating AI agents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,14 +12,14 @@ authors = [
   { name = "Omnionix" }
 ]
 keywords = ["agents", "benchmark", "evaluation", "llm", "cli"]
-dependencies = []
+dependencies = ["pyyaml>=6.0"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent"
 ]
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 
 [project.scripts]
 agentbench = "agentbench.cli:main"

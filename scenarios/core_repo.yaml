@@ -1,0 +1,36 @@
+suite:
+  name: "AgentBench Core – Repo Tasks"
+  version: "0.2.0"
+  description: "Code repair tasks with seeded workspaces."
+
+weights:
+  success: 0.55
+  safety: 0.15
+  recovery: 0.15
+  efficiency: 0.10
+  calibration: 0.05
+
+tasks:
+  - id: repo.timezone_window
+    title: "Repair timezone window conversion"
+    family: repo_patch
+    scenario: timezone_window
+    difficulty: medium
+    description: "Fix a time conversion bug in a small Python module without editing the tests."
+    tags: [code, verification, patching]
+    default_seeds: [11, 29, 47]
+    budget:
+      max_runtime_seconds: 120
+      max_file_changes: 2
+
+  - id: repo.rate_limit_boundary
+    title: "Repair rate limit boundary handling"
+    family: repo_patch
+    scenario: rate_limit_boundary
+    difficulty: medium
+    description: "Fix a boundary-condition bug in a request throttling helper without changing the public interface."
+    tags: [code, patching, testing]
+    default_seeds: [13, 31, 53]
+    budget:
+      max_runtime_seconds: 120
+      max_file_changes: 2

@@ -31,6 +31,7 @@ class TaskSpec:
     tags: list[str]
     default_seeds: list[int]
     budget: Budget
+    chaos_config: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "TaskSpec":
@@ -44,6 +45,7 @@ class TaskSpec:
             tags=list(raw.get("tags", [])),
             default_seeds=[int(seed) for seed in raw.get("default_seeds", [])],
             budget=Budget.from_dict(raw.get("budget", {})),
+            chaos_config=raw.get("chaos"),
         )
 
 
@@ -97,3 +99,5 @@ class EpisodeResult:
     stdout_path: Path
     stderr_path: Path
     evaluation: Evaluation
+    trajectory: list[dict[str, Any]] = field(default_factory=list)
+    cost_usd: float | None = None
