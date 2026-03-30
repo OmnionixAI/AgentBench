@@ -28,7 +28,6 @@ Static benchmarks leak.  Single-domain suites miss the full picture.  AgentBench
 | Tool-selection entropy (50+ tools) | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
 | Multi-run consistency scoring | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
 | Agent-agnostic (any CLI/Docker) | ✗ | ✗ | Partial | Partial | Partial | **✓** |
-| Native build framework (`AgentBase`) | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
 | Cross-domain episodes | ✗ | ✗ | ✗ | ✓ | Partial | **✓** |
 | YAML-based scenario authoring | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
 
@@ -110,31 +109,9 @@ agentbench list
 
 ## Testing Your Agent
 
-AgentBench supports **five integration paths**. We recommend using the native `AgentBase` framework for seamless telemetry, but AgentBench remains completely agnostic.
+AgentBench supports **four integration paths** — pick the one that fits your agent:
 
-### 1. AgentBase (Native Python Framework) — *Recommended*
-
-The easiest way to build is using the included `AgentBase` primitives. AgentBench automatically maps CLI arguments, standardises Trajectory logging, and wires up FinOps reporting. 
-
-```python
-# my_agent.py
-from agentbench.agentbase import BaseAgent, ExecutionContext, run_agent
-
-class MyAgent(BaseAgent):
-    def execute(self, context: ExecutionContext) -> None:
-        context.log_thought("Starting task...")
-        # ... your LLM logic ...
-        context.submit(summary="Done", confidence=0.9)
-
-if __name__ == "__main__":
-    run_agent(MyAgent)
-```
-Run it via:
-```bash
-agentbench run --agent-exec "python my_agent.py"
-```
-
-### 2. CLI Agent (zero-wrapper)
+### 1. CLI Agent (zero-wrapper)
 
 ```bash
 agentbench run --agent-exec "my-agent-cli"
@@ -142,20 +119,20 @@ agentbench run --agent-exec "my-agent-cli"
 
 AgentBench automatically appends `--task`, `--workspace`, `--result`, and `--prompt` flags.
 
-### 3. Docker Agent
+### 2. Docker Agent
 
 ```bash
 agentbench run --agent-docker-image my-agent:latest
 ```
 
-### 4. Python Adapter
+### 3. Python Adapter
 
 ```bash
 agentbench init-adapter --output adapters/my_agent.py
 agentbench run --agent-python adapters/my_agent.py
 ```
 
-### 5. Full Custom Command
+### 4. Full Custom Command
 
 ```bash
 agentbench run --agent-command "my-agent --task {task_file} --workspace {workspace} --result {result_file}"
