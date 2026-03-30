@@ -32,6 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
     agent_group.add_argument("--agent-command", help="Command template with placeholders like {task_file}.")
     agent_group.add_argument("--agent-exec", help="Executable or shell command prefix. AgentBench appends --task/--workspace/--result/--prompt automatically.")
     agent_group.add_argument("--agent-python", type=Path, help="Path to a Python adapter script with --task/--workspace/--result args.")
+    agent_group.add_argument("--agent-docker-image", help="Docker image for an agent that accepts --task/--workspace/--result/--prompt.")
+    run_parser.add_argument("--agent-docker-command", help="Optional command prefix to run inside the container before AgentBench appends standard flags.")
+    run_parser.add_argument("--agent-docker-args", default="", help="Extra raw docker run arguments such as environment variables.")
     run_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     run_parser.add_argument("--task", help="Run only one task id.")
     run_parser.add_argument("--seed", type=int, action="append", dest="seeds")
@@ -90,17 +93,7 @@ def cmd_list(args) -> int:
 
 
 def cmd_run(args) -> int:
-    agent_command = args.agent_command
-    if args.agent_exec is not None:
-        agent_command = (
-            f'{args.agent_exec} --task "{{task_file}}" --workspace "{{workspace}}" '
-            f'--result "{{result_file}}" --prompt "{{prompt_file}}"'
-        )
-    elif args.agent_python is not None:
-        agent_command = (
-            f'python "{args.agent_python}" --task {{task_file}} --workspace {{workspace}} '
-            f'--result {{result_file}} --prompt {{prompt_file}}'
-        )
+    agent_command = build_agent_command(args)
     summary = run_suite(
         suite_path=args.suite,
         agent_command=agent_command,
@@ -129,6 +122,34 @@ def cmd_run(args) -> int:
             )
         )
     return 0
+
+
+def build_agent_command(args) -> str:
+    if args.agent_exec is not None:
+        return (
+            f'{args.agent_exec} --task "{{task_file}}" --workspace "{{workspace}}" '
+            f'--result "{{result_file}}" --prompt "{{prompt_file}}"'
+        )
+    if args.agent_python is not None:
+        return (
+            f'python "{args.agent_python}" --task {{task_file}} --workspace {{workspace}} '
+            f'--result {{result_file}} --prompt {{prompt_file}}'
+        )
+    if args.agent_docker_image is not None:
+        inner_command = args.agent_docker_command or ""
+        prefix = f"{inner_command} " if inner_command else ""
+        docker_args = f"{args.agent_docker_args} " if args.agent_docker_args else ""
+        return (
+            "docker run --rm "
+            f'-v "{{docker_host_run_dir}}:{{docker_container_run_dir}}" '
+            f'-v "{{docker_host_repo}}:{{docker_repo}}:ro" '
+            f"{docker_args}"
+            f'{args.agent_docker_image} '
+            f'{prefix}'
+            '--task "{docker_task_file}" --workspace "{docker_workspace}" '
+            '--result "{docker_result_file}" --prompt "{docker_prompt_file}"'
+        )
+    return args.agent_command
 
 
 def cmd_prepare(args) -> int:

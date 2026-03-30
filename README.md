@@ -69,7 +69,7 @@ agentbench init-adapter --output adapters/my_agent.py
 
 ## Testing your own agent
 
-There are now three straightforward integration paths.
+There are now four straightforward integration paths.
 
 ### 1. Existing CLI agent, no wrapper needed
 
@@ -89,7 +89,34 @@ AgentBench automatically appends:
 
 That means tools like `my-agent-cli`, `uv run my_agent`, `node my-agent.js`, or `npx @org/agent` can be benchmarked directly as long as they accept those flags.
 
-### 2. Python adapter mode
+### 2. Dockerized agent
+
+If your agent already runs in a container, AgentBench can test it directly:
+
+```bash
+agentbench run ^
+  --agent-docker-image my-agent:latest
+```
+
+AgentBench mounts the generated episode into the container and passes:
+
+- `--task /agentbench_run/task.json`
+- `--workspace /agentbench_run/workspace`
+- `--result /agentbench_run/workspace/agent_result.json`
+- `--prompt /agentbench_run/prompt.md`
+
+If your image needs a specific command or environment variables:
+
+```bash
+agentbench run ^
+  --agent-docker-image python:3.13-slim ^
+  --agent-docker-command "python /agentbench_host_repo/examples/agents/reference_agent.py" ^
+  --agent-docker-args "-e PYTHONPATH=/agentbench_host_repo/src"
+```
+
+AgentBench also mounts the current repo read-only at `/agentbench_host_repo`, which is useful when your image needs access to local source code or configs at runtime.
+
+### 3. Python adapter mode
 
 If your agent can be wrapped in Python, generate a scaffold and plug your runtime into it:
 
@@ -110,7 +137,7 @@ The helper API in `agentbench.adapters` gives you:
 - `load_context(...)` to read the task contract
 - `write_result(...)` to emit a valid final result file
 
-### 3. Full custom command template
+### 4. Full custom command template
 
 If you need total control over invocation, you can still use the raw command-template mode:
 

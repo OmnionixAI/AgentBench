@@ -49,12 +49,22 @@ def _link_latest(output_root: Path, run_dir: Path) -> None:
 
 
 def _format_command(template: str, prepared, run_dir: Path) -> str:
+    docker_container_run_dir = "/agentbench_run"
+    docker_repo_dir = "/agentbench_host_repo"
     values = {
         "task_file": str(prepared.task_file),
         "prompt_file": str(prepared.prompt_path),
         "workspace": str(prepared.workspace),
         "result_file": str(prepared.result_file),
         "run_dir": str(run_dir),
+        "docker_host_run_dir": _docker_mount_path(run_dir),
+        "docker_container_run_dir": docker_container_run_dir,
+        "docker_task_file": f"{docker_container_run_dir}/task.json",
+        "docker_prompt_file": f"{docker_container_run_dir}/prompt.md",
+        "docker_workspace": f"{docker_container_run_dir}/workspace",
+        "docker_result_file": f"{docker_container_run_dir}/workspace/agent_result.json",
+        "docker_host_repo": _docker_mount_path(Path.cwd()),
+        "docker_repo": docker_repo_dir,
     }
     return template.format(**values)
 
@@ -271,3 +281,7 @@ def render_summary_markdown(summary: dict) -> str:
 
 def _display_score(value):
     return "n/a" if value is None else value
+
+
+def _docker_mount_path(path: Path) -> str:
+    return path.resolve().as_posix()
