@@ -15,9 +15,10 @@ keywords = ["agents", "benchmark", "evaluation", "llm", "cli"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent"
 ]
+license = "Apache-2.0"
 
 [project.scripts]
 agentbench = "agentbench.cli:main"
