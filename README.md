@@ -35,7 +35,7 @@ Run the core suite against the bundled reference agent:
 
 ```bash
 agentbench run ^
-  --agent-python examples/agents/reference_agent.py
+  --agent-exec "python examples/agents/reference_agent.py"
 ```
 
 Run only one task with a specific seed:
@@ -44,7 +44,7 @@ Run only one task with a specific seed:
 agentbench run ^
   --task workflow.support_refund ^
   --seed 11 ^
-  --agent-python examples/agents/reference_agent.py
+  --agent-exec "python examples/agents/reference_agent.py"
 ```
 
 Pretty-print a generated report:
@@ -69,9 +69,27 @@ agentbench init-adapter --output adapters/my_agent.py
 
 ## Testing your own agent
 
-There are now two straightforward integration paths.
+There are now three straightforward integration paths.
 
-### 1. Python adapter mode
+### 1. Existing CLI agent, no wrapper needed
+
+If your agent already runs from the command line, this is the easiest option:
+
+```bash
+agentbench run ^
+  --agent-exec "my-agent-cli"
+```
+
+AgentBench automatically appends:
+
+- `--task <path>`
+- `--workspace <path>`
+- `--result <path>`
+- `--prompt <path>`
+
+That means tools like `my-agent-cli`, `uv run my_agent`, `node my-agent.js`, or `npx @org/agent` can be benchmarked directly as long as they accept those flags.
+
+### 2. Python adapter mode
 
 If your agent can be wrapped in Python, generate a scaffold and plug your runtime into it:
 
@@ -92,9 +110,9 @@ The helper API in `agentbench.adapters` gives you:
 - `load_context(...)` to read the task contract
 - `write_result(...)` to emit a valid final result file
 
-### 2. Existing command-based agent
+### 3. Full custom command template
 
-If your agent is already exposed as a CLI, you can still use the raw command-template mode:
+If you need total control over invocation, you can still use the raw command-template mode:
 
 ```bash
 agentbench run ^

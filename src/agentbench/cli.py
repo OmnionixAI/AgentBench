@@ -30,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
     agent_group = run_parser.add_mutually_exclusive_group(required=True)
     agent_group.add_argument("--agent-command", help="Command template with placeholders like {task_file}.")
+    agent_group.add_argument("--agent-exec", help="Executable or shell command prefix. AgentBench appends --task/--workspace/--result/--prompt automatically.")
     agent_group.add_argument("--agent-python", type=Path, help="Path to a Python adapter script with --task/--workspace/--result args.")
     run_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     run_parser.add_argument("--task", help="Run only one task id.")
@@ -90,7 +91,12 @@ def cmd_list(args) -> int:
 
 def cmd_run(args) -> int:
     agent_command = args.agent_command
-    if args.agent_python is not None:
+    if args.agent_exec is not None:
+        agent_command = (
+            f'{args.agent_exec} --task "{{task_file}}" --workspace "{{workspace}}" '
+            f'--result "{{result_file}}" --prompt "{{prompt_file}}"'
+        )
+    elif args.agent_python is not None:
         agent_command = (
             f'python "{args.agent_python}" --task {{task_file}} --workspace {{workspace}} '
             f'--result {{result_file}} --prompt {{prompt_file}}'
