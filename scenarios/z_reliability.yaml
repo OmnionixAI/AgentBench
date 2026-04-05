@@ -1,6 +1,6 @@
 suite:
   name: "Omnionix AgentBench Reliability"
-  version: "0.2.7"
+  version: "0.2.9"
   description: "Long-session reliability scenarios for persistent memory, state drift, and resumed handoffs."
 
 tasks:

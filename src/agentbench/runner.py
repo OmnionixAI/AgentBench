@@ -8,12 +8,13 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from agentbench import __version__
 from agentbench.finops import compute_cost, cost_per_task_success, efficiency_score, parse_token_report
 from agentbench.models import EpisodeResult, SuiteSpec
 from agentbench.registry import get_family
 from agentbench.scoring import consistency_score
 from agentbench.trajectory import Trajectory
-from agentbench.utils import ensure_dir, read_json, sanitize_name, write_json
+from agentbench.utils import ensure_dir, read_json, sanitize_name, stable_hash, write_json
 
 
 def load_suite(path: Path) -> SuiteSpec:
@@ -226,6 +227,10 @@ def prepare_task(suite_path: Path, task_id: str, seed: int, output_dir: Path) ->
 def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: list[EpisodeResult]) -> dict:
     aggregates: dict[str, list[float]] = defaultdict(list)
     totals_by_task: dict[str, list[float]] = defaultdict(list)
+    task_family_map = {task.id: task.family for task in suite.tasks}
+    task_tags_map = {task.id: task.tags for task in suite.tasks}
+    family_totals: dict[str, list[float]] = defaultdict(list)
+    tag_totals: dict[str, list[float]] = defaultdict(list)
     per_task: list[dict] = []
     total_cost = 0.0
     costs_available = False
@@ -236,12 +241,16 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
                 aggregates[dimension].append(float(score))
         aggregates["overall"].append(float(result.evaluation.overall))
         totals_by_task[result.task_id].append(float(result.evaluation.overall))
+        family_totals[task_family_map.get(result.task_id, "unknown")].append(float(result.evaluation.overall))
+        for tag in task_tags_map.get(result.task_id, []):
+            tag_totals[tag].append(float(result.evaluation.overall))
         if result.cost_usd is not None:
             total_cost += result.cost_usd
             costs_available = True
         per_task.append(
             {
                 "task_id": result.task_id,
+                "family": task_family_map.get(result.task_id, "unknown"),
                 "seed": result.seed,
                 "run_label": result.run_label,
                 "passed": result.evaluation.passed,
@@ -281,6 +290,41 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
         avg_cost = total_cost / len(results) if len(results) > 0 else 0.0001
         finops["avg_efficiency_score"] = efficiency_score(avg_overall, avg_cost, avg_duration)
 
+    by_family = {
+        family: {
+            "average_overall": round(sum(values) / len(values), 4),
+            "episodes": len(values),
+        }
+        for family, values in family_totals.items()
+        if values
+    }
+    by_tag = {
+        tag: {
+            "average_overall": round(sum(values) / len(values), 4),
+            "episodes": len(values),
+        }
+        for tag, values in tag_totals.items()
+        if values
+    }
+
+    suite_fingerprint = stable_hash(
+        {
+            "suite_name": suite.name,
+            "suite_version": suite.version,
+            "weights": suite.weights,
+            "tasks": [
+                {
+                    "id": task.id,
+                    "family": task.family,
+                    "scenario": task.scenario,
+                    "difficulty": task.difficulty,
+                    "default_seeds": task.default_seeds,
+                }
+                for task in suite.tasks
+            ],
+        }
+    )
+
     return {
         "suite": {
             "name": suite.name,
@@ -288,13 +332,17 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
             "description": suite.description,
             "source": str(suite_path),
             "weights": suite.weights,
+            "fingerprint": suite_fingerprint,
         },
+        "agentbench_version": __version__,
         "run_dir": str(run_dir),
         "episodes": len(results),
         "passed": passed_count,
         "failed": sum(1 for result in results if not result.evaluation.passed),
         "averages": averages,
         "consistency": None if not consistency_values else round(sum(consistency_values) / len(consistency_values), 4),
+        "by_family": by_family,
+        "by_tag": by_tag,
         "finops": finops,
         "tasks": per_task,
     }

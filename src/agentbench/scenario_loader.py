@@ -35,7 +35,7 @@ def load_scenario_dir(directory: Path) -> SuiteSpec:
 
     merged_tasks: list[dict[str, Any]] = []
     name = "AgentBench Combined Suite"
-    version = "0.2.7"
+    version = "0.2.9"
     description = "Merged scenario suite."
     weights: dict[str, float] = {}
 
@@ -90,7 +90,7 @@ def _parse_suite(raw: dict[str, Any], source: str = "") -> SuiteSpec:
 
     return SuiteSpec.from_dict({
         "name": suite_block.get("name", "AgentBench Suite"),
-        "version": suite_block.get("version", "0.2.7"),
+        "version": suite_block.get("version", "0.2.9"),
         "description": suite_block.get("description", ""),
         "weights": weights,
         "tasks": raw.get("tasks", []),

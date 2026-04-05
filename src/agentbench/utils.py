@@ -43,3 +43,8 @@ def changed_files(before: dict[str, str], after: dict[str, str]) -> list[str]:
 
 def float_round(value: float, places: int = 4) -> float:
     return round(float(value), places)
+
+
+def stable_hash(payload: Any) -> str:
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()

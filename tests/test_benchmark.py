@@ -251,6 +251,98 @@ class AgentBenchSmokeTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn('"passed": 1', completed.stdout)
 
+    def test_submit_and_build_leaderboard(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "runs"
+            submissions_dir = Path(temp_dir) / "submissions"
+            site_dir = Path(temp_dir) / "site"
+            run_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "run",
+                    "--output-dir",
+                    str(output_dir),
+                    "--task",
+                    "reliability.memory_refresh",
+                    "--seed",
+                    "11",
+                    "--agent-python",
+                    "examples/agents/reference_agent.py",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(run_completed.returncode, 0, run_completed.stderr)
+
+            summary_path = output_dir / "latest" / "summary.json"
+            submit_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "submit",
+                    "--summary",
+                    str(summary_path),
+                    "--submissions-dir",
+                    str(submissions_dir),
+                    "--agent-name",
+                    "Reference Agent",
+                    "--agent-version",
+                    "0.2.9",
+                    "--organization",
+                    "Omnionix",
+                    "--creator",
+                    "Josh Verma",
+                    "--framework",
+                    "custom-cli",
+                    "--model",
+                    "gpt-test",
+                    "--runtime",
+                    "python",
+                    "--integration",
+                    "agent-python",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(submit_completed.returncode, 0, submit_completed.stderr)
+            self.assertIn('"submission_id"', submit_completed.stdout)
+
+            build_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "build-leaderboard",
+                    "--submissions-dir",
+                    str(submissions_dir),
+                    "--output-dir",
+                    str(site_dir),
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(build_completed.returncode, 0, build_completed.stderr)
+            leaderboard_payload = (site_dir / "leaderboard.json").read_text(encoding="utf-8")
+            index_html = (site_dir / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Reference Agent", leaderboard_payload)
+            self.assertIn("gpt-test", leaderboard_payload)
+            self.assertIn("Public Leaderboard", index_html)
+
 
 if __name__ == "__main__":
     unittest.main()

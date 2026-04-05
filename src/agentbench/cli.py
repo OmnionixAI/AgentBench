@@ -5,6 +5,7 @@ from pathlib import Path
 
 from agentbench import __version__
 from agentbench.console import banner, dump_json, key_value_block, latest_summary_path, render_table
+from agentbench.leaderboard import build_leaderboard, create_submission, save_submission, serve_leaderboard
 from agentbench.runner import load_suite, prepare_task, render_summary_markdown, run_suite
 from agentbench.scaffold import write_python_adapter_template
 from agentbench.utils import read_json
@@ -13,6 +14,8 @@ from agentbench.utils import read_json
 DEFAULT_SUITE = Path("scenarios")
 DEFAULT_SUITE_FALLBACK = Path("benchmarks/core.json")
 DEFAULT_OUTPUT = Path("runs")
+DEFAULT_SUBMISSIONS = Path("leaderboard/submissions")
+DEFAULT_LEADERBOARD_SITE = Path("leaderboard/site")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +63,33 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser = subparsers.add_parser("report", help="Render an existing summary.json.")
     report_parser.add_argument("--summary", type=Path)
     report_parser.add_argument("--json", action="store_true")
+
+    submit_parser = subparsers.add_parser("submit", help="Validate and save a public leaderboard submission.")
+    submit_parser.add_argument("--summary", type=Path, required=True)
+    submit_parser.add_argument("--submissions-dir", type=Path, default=DEFAULT_SUBMISSIONS)
+    submit_parser.add_argument("--agent-name", required=True)
+    submit_parser.add_argument("--agent-version", required=True)
+    submit_parser.add_argument("--organization", required=True)
+    submit_parser.add_argument("--creator", required=True)
+    submit_parser.add_argument("--framework", required=True)
+    submit_parser.add_argument("--model", required=True)
+    submit_parser.add_argument("--runtime", required=True)
+    submit_parser.add_argument("--integration", required=True)
+    submit_parser.add_argument("--website")
+    submit_parser.add_argument("--source-url")
+    submit_parser.add_argument("--verified", action="store_true")
+    submit_parser.add_argument("--json", action="store_true")
+
+    build_lb_parser = subparsers.add_parser("build-leaderboard", help="Build the public leaderboard site and JSON.")
+    build_lb_parser.add_argument("--submissions-dir", type=Path, default=DEFAULT_SUBMISSIONS)
+    build_lb_parser.add_argument("--output-dir", type=Path, default=DEFAULT_LEADERBOARD_SITE)
+    build_lb_parser.add_argument("--json", action="store_true")
+
+    serve_lb_parser = subparsers.add_parser("serve-leaderboard", help="Serve a dynamic leaderboard that refreshes from submissions.")
+    serve_lb_parser.add_argument("--submissions-dir", type=Path, default=DEFAULT_SUBMISSIONS)
+    serve_lb_parser.add_argument("--output-dir", type=Path, default=DEFAULT_LEADERBOARD_SITE)
+    serve_lb_parser.add_argument("--host", default="127.0.0.1")
+    serve_lb_parser.add_argument("--port", type=int, default=8765)
 
     return parser
 
@@ -173,7 +203,7 @@ def build_agent_command(args) -> str:
 
 def cmd_prepare(args) -> int:
     manifest = prepare_task(
-        suite_path=args.suite,
+        suite_path=_resolve_suite(args.suite),
         task_id=args.task,
         seed=args.seed,
         output_dir=args.output_dir,
@@ -218,6 +248,54 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_submit(args) -> int:
+    submission = create_submission(
+        summary_path=args.summary,
+        metadata={
+            "agent": {
+                "name": args.agent_name,
+                "version": args.agent_version,
+                "organization": args.organization,
+                "creator": args.creator,
+                "framework": args.framework,
+                "model": args.model,
+                "runtime": args.runtime,
+                "integration": args.integration,
+            },
+            "links": {
+                "website": args.website,
+                "source_url": args.source_url,
+            },
+            "verified": args.verified,
+        },
+    )
+    path = save_submission(submission, args.submissions_dir)
+    if args.json:
+        print(dump_json({"submission": submission, "path": str(path)}))
+    else:
+        print(banner("Omnionix AgentBench", "Submission saved"))
+        print()
+        print(key_value_block({"Agent": submission["agent"]["name"], "Submission": submission["submission_id"], "Path": path}))
+    return 0
+
+
+def cmd_build_leaderboard(args) -> int:
+    output = build_leaderboard(args.submissions_dir, args.output_dir)
+    if args.json:
+        print(dump_json({"leaderboard_json": str(output), "site": str(args.output_dir / 'index.html')}))
+    else:
+        print(banner("Omnionix AgentBench", "Leaderboard built"))
+        print()
+        print(key_value_block({"JSON": output, "Site": args.output_dir / "index.html"}))
+    return 0
+
+
+def cmd_serve_leaderboard(args) -> int:
+    print(banner("Omnionix AgentBench", f"Serving leaderboard on http://{args.host}:{args.port}"))
+    serve_leaderboard(args.submissions_dir, args.output_dir, args.host, args.port)
+    return 0
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -231,4 +309,10 @@ def main() -> int:
         return cmd_init_adapter(args)
     if args.command == "report":
         return cmd_report(args)
+    if args.command == "submit":
+        return cmd_submit(args)
+    if args.command == "build-leaderboard":
+        return cmd_build_leaderboard(args)
+    if args.command == "serve-leaderboard":
+        return cmd_serve_leaderboard(args)
     raise SystemExit(f"Unsupported command: {args.command}")
