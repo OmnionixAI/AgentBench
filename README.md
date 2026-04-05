@@ -261,6 +261,7 @@ GitHub Actions also runs this automatically through [eval.yml](C:/JV/AgentBench/
 - pushes to `main` refresh the stored baseline artifact
 - scheduled runs track regression drift over time
 - the public leaderboard shows the latest CI regression-check status and links back to the workflow run
+- the public leaderboard separates `Verified` and `Community` entries into distinct sections
 
 ## Debugging
 

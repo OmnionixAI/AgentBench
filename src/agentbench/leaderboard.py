@@ -342,6 +342,9 @@ def _leaderboard_html() -> str:
     .chip.good { color: var(--accent); }
     .chip.bad { color: var(--danger); }
     .chip.warn { color: var(--warm); }
+    .section { margin-top: 24px; }
+    .section-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; }
+    .section-head h2 { margin: 0; font-size: 22px; }
     input, select {
       background: #091727; color: var(--text); border: 1px solid var(--line); border-radius: 10px;
       padding: 10px 12px;
@@ -376,6 +379,8 @@ def _leaderboard_html() -> str:
     <div class="meta">
       <div class="chip" id="generated">Loading leaderboard...</div>
       <div class="chip" id="count">0 submissions</div>
+      <div class="chip" id="verified-count">0 verified</div>
+      <div class="chip" id="community-count">0 community</div>
       <div class="chip">Auto-refresh: 60s</div>
     </div>
     <div class="status-card">
@@ -389,11 +394,6 @@ def _leaderboard_html() -> str:
     </div>
     <div class="filters" style="margin-top: 14px;">
       <input id="search" placeholder="Filter by agent, org, model, framework">
-      <select id="verified">
-        <option value="all">All submissions</option>
-        <option value="verified">Verified only</option>
-        <option value="unverified">Unverified only</option>
-      </select>
       <select id="sort">
         <option value="overall">Sort: Overall</option>
         <option value="reliability">Sort: Reliability</option>
@@ -402,23 +402,49 @@ def _leaderboard_html() -> str:
         <option value="cost_efficiency">Sort: Cost Efficiency</option>
       </select>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Rank</th><th>Agent</th><th>Overall</th><th>Reliability</th><th>MCP</th><th>Consistency</th><th>Cost</th><th>Verification</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
+    <div class="section">
+      <div class="section-head">
+        <h2>Verified</h2>
+        <div class="chip good" id="verified-summary">0 trusted entries</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th><th>Agent</th><th>Overall</th><th>Reliability</th><th>MCP</th><th>Consistency</th><th>Cost</th><th>Verification</th>
+          </tr>
+        </thead>
+        <tbody id="verified-rows"></tbody>
+      </table>
+    </div>
+    <div class="section">
+      <div class="section-head">
+        <h2>Community</h2>
+        <div class="chip warn" id="community-summary">0 community entries</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th><th>Agent</th><th>Overall</th><th>Reliability</th><th>MCP</th><th>Consistency</th><th>Cost</th><th>Verification</th>
+          </tr>
+        </thead>
+        <tbody id="community-rows"></tbody>
+      </table>
+    </div>
   </div>
   <script>
-    const state = { rows: [], sort: "overall", verified: "all", search: "" };
+    const state = { rows: [], sort: "overall", search: "" };
     async function load() {
       const response = await fetch("leaderboard.json?ts=" + Date.now());
       const data = await response.json();
       state.rows = data.submissions || [];
       document.getElementById("generated").textContent = "Generated " + new Date(data.generated_at).toLocaleString();
       document.getElementById("count").textContent = `${state.rows.length} submissions`;
+      const verifiedRows = state.rows.filter(row => !!row.verified);
+      const communityRows = state.rows.filter(row => !row.verified);
+      document.getElementById("verified-count").textContent = `${verifiedRows.length} verified`;
+      document.getElementById("community-count").textContent = `${communityRows.length} community`;
+      document.getElementById("verified-summary").textContent = `${verifiedRows.length} trusted entries`;
+      document.getElementById("community-summary").textContent = `${communityRows.length} community entries`;
       render();
       loadCiStatus();
     }
@@ -456,10 +482,6 @@ def _leaderboard_html() -> str:
     }
     function filteredRows() {
       let rows = [...state.rows];
-      if (state.verified !== "all") {
-        const wantsVerified = state.verified === "verified";
-        rows = rows.filter(row => !!row.verified === wantsVerified);
-      }
       if (state.search) {
         const q = state.search.toLowerCase();
         rows = rows.filter(row => [row.agent_name, row.organization, row.model, row.framework].join(" ").toLowerCase().includes(q));
@@ -467,37 +489,44 @@ def _leaderboard_html() -> str:
       rows.sort((a, b) => (b[state.sort] ?? -1) - (a[state.sort] ?? -1));
       return rows;
     }
-    function render() {
-      const tbody = document.getElementById("rows");
+    function rowHtml(row, index) {
+      return `
+        <td data-label="Rank" class="metric">${index + 1}</td>
+        <td data-label="Agent">
+          <div class="agent">
+            <strong>${row.agent_name} <span style="color:#98abc7;">v${row.agent_version}</span></strong>
+            <span>${row.organization} | ${row.creator}</span>
+            <span>${row.framework} | ${row.model} | ${row.runtime}</span>
+            <span>${row.integration}${row.website ? ` | <a href="${row.website}" target="_blank" rel="noreferrer">website</a>` : ""}${row.source_url ? ` | <a href="${row.source_url}" target="_blank" rel="noreferrer">source</a>` : ""}</span>
+          </div>
+        </td>
+        <td data-label="Overall" class="metric">${metric(row.overall)}</td>
+        <td data-label="Reliability" class="metric">${metric(row.reliability)}</td>
+        <td data-label="MCP" class="metric">${metric(row.mcp)}</td>
+        <td data-label="Consistency" class="metric">${metric(row.consistency)}</td>
+        <td data-label="Cost Efficiency" class="metric">${metric(row.cost_efficiency)}</td>
+        <td data-label="Verification">
+          <div class="${row.verified ? "verified" : "unverified"}">${row.verification_status || (row.verified ? "verified" : "community")}</div>
+          <div style="color:#98abc7;font-size:12px;">${row.key_id ? `key ${row.key_id}` : row.verification_reason}</div>
+          <div style="color:#98abc7;font-size:12px;">${row.reproducibility_hash.slice(0, 12)}</div>
+        </td>
+      `;
+    }
+    function renderBucket(targetId, rows) {
+      const tbody = document.getElementById(targetId);
       tbody.innerHTML = "";
-      filteredRows().forEach((row, index) => {
+      rows.forEach((row, index) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td data-label="Rank" class="metric">${index + 1}</td>
-          <td data-label="Agent">
-            <div class="agent">
-              <strong>${row.agent_name} <span style="color:#98abc7;">v${row.agent_version}</span></strong>
-              <span>${row.organization} | ${row.creator}</span>
-              <span>${row.framework} | ${row.model} | ${row.runtime}</span>
-              <span>${row.integration}${row.website ? ` | <a href="${row.website}" target="_blank" rel="noreferrer">website</a>` : ""}${row.source_url ? ` | <a href="${row.source_url}" target="_blank" rel="noreferrer">source</a>` : ""}</span>
-            </div>
-          </td>
-          <td data-label="Overall" class="metric">${metric(row.overall)}</td>
-          <td data-label="Reliability" class="metric">${metric(row.reliability)}</td>
-          <td data-label="MCP" class="metric">${metric(row.mcp)}</td>
-          <td data-label="Consistency" class="metric">${metric(row.consistency)}</td>
-          <td data-label="Cost Efficiency" class="metric">${metric(row.cost_efficiency)}</td>
-          <td data-label="Verification">
-            <div class="${row.verified ? "verified" : "unverified"}">${row.verification_status || (row.verified ? "verified" : "community")}</div>
-            <div style="color:#98abc7;font-size:12px;">${row.key_id ? `key ${row.key_id}` : row.verification_reason}</div>
-            <div style="color:#98abc7;font-size:12px;">${row.reproducibility_hash.slice(0, 12)}</div>
-          </td>
-        `;
+        tr.innerHTML = rowHtml(row, index);
         tbody.appendChild(tr);
       });
     }
+    function render() {
+      const rows = filteredRows();
+      renderBucket("verified-rows", rows.filter(row => !!row.verified));
+      renderBucket("community-rows", rows.filter(row => !row.verified));
+    }
     document.getElementById("search").addEventListener("input", event => { state.search = event.target.value.trim(); render(); });
-    document.getElementById("verified").addEventListener("change", event => { state.verified = event.target.value; render(); });
     document.getElementById("sort").addEventListener("change", event => { state.sort = event.target.value; render(); });
     load();
     setInterval(load, 60000);
