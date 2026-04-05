@@ -122,7 +122,7 @@ agentbench submit ^
   --organization "Omnionix" ^
   --creator "OmnionixAI" ^
   --framework "custom-cli" ^
-  --model "gpt-5.2" ^
+  --model "avara-x1-mini" ^
   --runtime "python" ^
   --integration "agent-exec" ^
   --website "https://example.com" ^
@@ -152,7 +152,7 @@ agentbench submit ^
   --organization "Omnionix" ^
   --creator "OmnionixAI" ^
   --framework "custom-cli" ^
-  --model "gpt-5.2" ^
+  --model "avara-x1-mini" ^
   --runtime "python" ^
   --integration "agent-exec" ^
   --signing-key-env LEADERBOARD_SIGNING_KEY ^
