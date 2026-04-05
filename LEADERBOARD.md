@@ -154,7 +154,7 @@ To enable it:
 2. Go to `Pages`.
 3. Set `Source` to `GitHub Actions`.
 4. Go to `Settings` -> `Secrets and variables` -> `Actions`.
-5. Add a repository secret named `LEADERBOARD_SIGNING_KEY`.
+5. Maintainers add a repository secret named `LEADERBOARD_SIGNING_KEY` for verification during leaderboard publishing.
 6. Merge leaderboard submissions into `main`.
 
 After that, the workflow rebuilds and redeploys the leaderboard whenever relevant changes land.
@@ -168,9 +168,12 @@ The intended public flow is:
 3. Add the generated JSON file to `leaderboard/submissions/`.
 4. Open a pull request.
 5. GitHub Actions runs `validate-submissions`.
-6. Merge to `main`.
-7. GitHub Actions runs `publish-leaderboard`.
-8. The live leaderboard updates automatically.
+6. Maintainers optionally sign or attest trusted submissions.
+7. Merge to `main`.
+8. GitHub Actions runs `publish-leaderboard`.
+9. The live leaderboard updates automatically.
+
+External submitters do not need access to `LEADERBOARD_SIGNING_KEY`. That key belongs to the repository maintainers and is used by GitHub Actions to verify signed submissions during publishing.
 
 ## Submission tips
 

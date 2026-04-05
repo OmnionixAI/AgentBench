@@ -191,7 +191,7 @@ The site auto-refreshes and shows exactly which agent you are looking at: name, 
 The repo includes a GitHub Actions workflow that rebuilds the site on every push affecting `leaderboard/submissions/` or the leaderboard codepath. To enable verified publishing:
 
 1. Turn on GitHub Pages for the repository and use GitHub Actions as the source.
-2. Add a repository secret named `LEADERBOARD_SIGNING_KEY`.
+2. Maintainers should add a repository secret named `LEADERBOARD_SIGNING_KEY` for GitHub Actions verification.
 3. Commit submissions into `leaderboard/submissions/`.
 
 Once merged to `main`, the workflow regenerates `leaderboard/site/` and deploys it to Pages.
@@ -205,8 +205,11 @@ The repo also includes a `validate-submissions` workflow so incoming leaderboard
 3. Commit the JSON into `leaderboard/submissions/`.
 4. Open a PR.
 5. Let `validate-submissions` pass.
-6. Merge to `main`.
-7. Let `publish-leaderboard` deploy the update.
+6. Maintainers optionally sign or attest trusted submissions.
+7. Merge to `main`.
+8. Let `publish-leaderboard` deploy the update.
+
+Outside contributors do not need the repository signing secret. Unsigned submissions can still be accepted and appear as `community`, while maintainer-attested submissions can appear as `verified`.
 
 ## Why this helps standardization
 
