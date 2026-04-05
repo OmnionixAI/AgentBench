@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from agentbench import __version__
+from agentbench.compare import compare_runs, render_comparison_markdown, resolve_window_baseline
 from agentbench.console import banner, dump_json, key_value_block, latest_summary_path, render_table
 from agentbench.leaderboard import (
     build_leaderboard,
@@ -71,6 +72,14 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser = subparsers.add_parser("report", help="Render an existing summary.json.")
     report_parser.add_argument("--summary", type=Path)
     report_parser.add_argument("--json", action="store_true")
+
+    compare_parser = subparsers.add_parser("compare", help="Compare two benchmark runs and detect regressions.")
+    compare_parser.add_argument("--baseline", type=Path, help="Baseline run directory or summary.json.")
+    compare_parser.add_argument("--current", type=Path, default=DEFAULT_OUTPUT / "latest", help="Current run directory or summary.json.")
+    compare_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT, help="Run root used with --window.")
+    compare_parser.add_argument("--window", type=int, help="Compare current against the N-th most recent completed run.")
+    compare_parser.add_argument("--threshold", type=float, default=0.05, help="Regression threshold (default: 0.05).")
+    compare_parser.add_argument("--json", action="store_true")
 
     submit_parser = subparsers.add_parser("submit", help="Validate and save a public leaderboard submission.")
     submit_parser.add_argument("--summary", type=Path, required=True)
@@ -270,6 +279,23 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_compare(args) -> int:
+    if args.window is not None and args.baseline is not None:
+        raise SystemExit("Choose either --baseline or --window, not both.")
+    baseline = args.baseline
+    if args.window is not None:
+        baseline = resolve_window_baseline(args.output_dir, args.window, current=args.current)
+    if baseline is None:
+        raise SystemExit("Pass --baseline or --window.")
+
+    comparison = compare_runs(baseline=baseline, current=args.current, threshold=args.threshold)
+    if args.json:
+        print(dump_json(comparison.to_dict()))
+    else:
+        print(render_comparison_markdown(comparison))
+    return 1 if comparison.any_regression else 0
+
+
 def cmd_submit(args) -> int:
     submission = create_submission(
         summary_path=args.summary,
@@ -369,6 +395,8 @@ def main() -> int:
         return cmd_init_adapter(args)
     if args.command == "report":
         return cmd_report(args)
+    if args.command == "compare":
+        return cmd_compare(args)
     if args.command == "submit":
         return cmd_submit(args)
     if args.command == "build-leaderboard":

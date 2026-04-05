@@ -45,6 +45,12 @@ List tasks:
 agentbench list
 ```
 
+Compare two runs:
+
+```bash
+agentbench compare --baseline runs/20260330-100000 --current runs/latest
+```
+
 ## Integration Paths
 
 - `CLI`: `agentbench run --agent-exec "my-agent-cli"`
@@ -230,6 +236,24 @@ Each run creates:
 - per-episode `agent_stderr.txt`
 - suite `summary.json`
 - suite `summary.md`
+
+## Cross-Run Comparison
+
+AgentBench can compare two completed runs and detect regressions across aggregate scores, consistency, and FinOps metrics.
+
+Examples:
+
+```bash
+agentbench compare --baseline runs/20260330-100000 --current runs/latest
+agentbench compare --current runs/latest --output-dir runs --window 1 --threshold 0.05
+agentbench compare --baseline runs/20260330-100000 --current runs/latest --json
+```
+
+Notes:
+
+- `--window 1` compares against the previous completed timestamped run
+- the command exits with code `1` when regressions are detected, which makes it CI-friendly
+- `--json` emits machine-readable deltas for automation
 
 ## Debugging
 

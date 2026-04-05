@@ -201,6 +201,140 @@ class AgentBenchSmokeTests(unittest.TestCase):
             self.assertEqual(prepare_completed.returncode, 0, prepare_completed.stderr)
             self.assertIn('"task_id": "data.margin_hotspots"', prepare_completed.stdout)
 
+    def test_compare_command_detects_regression(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline_dir = Path(temp_dir) / "20260330-100000"
+            current_dir = Path(temp_dir) / "20260331-100000"
+            baseline_dir.mkdir(parents=True, exist_ok=True)
+            current_dir.mkdir(parents=True, exist_ok=True)
+            (baseline_dir / "summary.json").write_text(
+                """
+{
+  "averages": {
+    "overall": 0.847,
+    "success": 0.873,
+    "calibration": 0.912,
+    "safety": 0.966,
+    "recovery": 0.801,
+    "efficiency": 0.793,
+    "reliability": 0.923
+  },
+  "consistency": 0.923,
+  "episodes": 9,
+  "finops": {
+    "avg_efficiency_score": 0.712,
+    "cost_per_task_success": 0.52,
+    "total_cost_usd": 4.68
+  },
+  "run_dir": "%s"
+}
+                """.strip()
+                % str(baseline_dir).replace("\\", "\\\\"),
+                encoding="utf-8",
+            )
+            (current_dir / "summary.json").write_text(
+                """
+{
+  "averages": {
+    "overall": 0.791,
+    "success": 0.818,
+    "calibration": 0.934,
+    "safety": 0.971,
+    "recovery": 0.756,
+    "efficiency": 0.782,
+    "reliability": 0.887
+  },
+  "consistency": 0.887,
+  "episodes": 9,
+  "finops": {
+    "avg_efficiency_score": 0.701,
+    "cost_per_task_success": 0.61,
+    "total_cost_usd": 5.49
+  },
+  "run_dir": "%s"
+}
+                """.strip()
+                % str(current_dir).replace("\\", "\\\\"),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "compare",
+                    "--baseline",
+                    str(baseline_dir),
+                    "--current",
+                    str(current_dir),
+                    "--threshold",
+                    "0.05",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn('"any_regression": true', completed.stdout)
+            self.assertIn('"dimension": "overall"', completed.stdout)
+
+    def test_compare_command_with_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "runs"
+            older_dir = output_dir / "20260329-100000"
+            current_dir = output_dir / "20260330-100000"
+            latest_dir = output_dir / "latest"
+            older_dir.mkdir(parents=True, exist_ok=True)
+            current_dir.mkdir(parents=True, exist_ok=True)
+            latest_dir.mkdir(parents=True, exist_ok=True)
+            summary_payload = """
+{
+  "averages": {
+    "overall": %s,
+    "success": %s
+  },
+  "consistency": %s,
+  "episodes": 2,
+  "finops": {
+    "avg_efficiency_score": null,
+    "cost_per_task_success": null,
+    "total_cost_usd": null
+  },
+  "run_dir": "%s"
+}
+            """.strip()
+            (older_dir / "summary.json").write_text(summary_payload % ("0.80", "0.82", "0.90", str(older_dir).replace("\\", "\\\\")), encoding="utf-8")
+            (current_dir / "summary.json").write_text(summary_payload % ("0.83", "0.84", "0.91", str(current_dir).replace("\\", "\\\\")), encoding="utf-8")
+            (latest_dir / "summary.json").write_text(summary_payload % ("0.83", "0.84", "0.91", str(current_dir).replace("\\", "\\\\")), encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "compare",
+                    "--current",
+                    str(latest_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--window",
+                    "1",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn('"baseline_timestamp": "2026-03-29T10:00:00Z"', completed.stdout)
+            self.assertIn('"current_timestamp": "2026-03-30T10:00:00Z"', completed.stdout)
+
     def test_build_docker_agent_command(self) -> None:
         command = build_agent_command(
             Namespace(
