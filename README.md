@@ -260,6 +260,7 @@ GitHub Actions also runs this automatically through [eval.yml](C:/JV/AgentBench/
 - pull requests benchmark the current branch and compare against the latest successful `main` baseline artifact
 - pushes to `main` refresh the stored baseline artifact
 - scheduled runs track regression drift over time
+- the public leaderboard shows the latest CI regression-check status and links back to the workflow run
 
 ## Debugging
 

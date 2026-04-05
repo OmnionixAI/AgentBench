@@ -327,7 +327,21 @@ def _leaderboard_html() -> str:
       background: rgba(15, 28, 45, 0.84); border: 1px solid var(--line); border-radius: 18px;
       padding: 14px 16px; backdrop-filter: blur(10px);
     }
+    .status-card {
+      margin-top: 14px;
+      background: rgba(15, 28, 45, 0.88);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      display: grid;
+      gap: 8px;
+    }
+    .status-title { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+    .status-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
     .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; color: var(--muted); }
+    .chip.good { color: var(--accent); }
+    .chip.bad { color: var(--danger); }
+    .chip.warn { color: var(--warm); }
     input, select {
       background: #091727; color: var(--text); border: 1px solid var(--line); border-radius: 10px;
       padding: 10px 12px;
@@ -364,6 +378,15 @@ def _leaderboard_html() -> str:
       <div class="chip" id="count">0 submissions</div>
       <div class="chip">Auto-refresh: 60s</div>
     </div>
+    <div class="status-card">
+      <div class="status-title">Latest Regression Check</div>
+      <div class="status-row">
+        <div class="chip" id="ci-status">Loading CI status...</div>
+        <div class="chip" id="ci-threshold">Threshold: n/a</div>
+        <div class="chip" id="ci-regressions">Regressions: n/a</div>
+      </div>
+      <div id="ci-meta" style="color:#98abc7;font-size:13px;">Waiting for CI metadata...</div>
+    </div>
     <div class="filters" style="margin-top: 14px;">
       <input id="search" placeholder="Filter by agent, org, model, framework">
       <select id="verified">
@@ -397,6 +420,36 @@ def _leaderboard_html() -> str:
       document.getElementById("generated").textContent = "Generated " + new Date(data.generated_at).toLocaleString();
       document.getElementById("count").textContent = `${state.rows.length} submissions`;
       render();
+      loadCiStatus();
+    }
+    async function loadCiStatus() {
+      const chip = document.getElementById("ci-status");
+      const threshold = document.getElementById("ci-threshold");
+      const regressions = document.getElementById("ci-regressions");
+      const meta = document.getElementById("ci-meta");
+      try {
+        const response = await fetch("ci_status.json?ts=" + Date.now());
+        if (!response.ok) {
+          throw new Error("missing");
+        }
+        const data = await response.json();
+        chip.className = "chip " + (data.status_class || "");
+        chip.textContent = data.status_label || "CI status unavailable";
+        threshold.textContent = `Threshold: ${data.regression_threshold ?? "n/a"}`;
+        regressions.textContent = `Regressions: ${data.regression_count ?? "n/a"}`;
+        let detail = data.summary || "No CI summary available.";
+        if (data.run_url) {
+          detail += ` `;
+          detail += `<a href="${data.run_url}" target="_blank" rel="noreferrer">Open workflow run</a>`;
+        }
+        meta.innerHTML = detail;
+      } catch (error) {
+        chip.className = "chip warn";
+        chip.textContent = "CI status unavailable";
+        threshold.textContent = "Threshold: n/a";
+        regressions.textContent = "Regressions: n/a";
+        meta.textContent = "The leaderboard was published without CI status metadata.";
+      }
     }
     function metric(value) {
       return value === null || value === undefined ? "n/a" : Number(value).toFixed(4);
