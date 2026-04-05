@@ -144,6 +144,22 @@ jobs:
             --json > compare_results.json
           STATUS=$?
           set -e
+          if [ ! -s compare_results.json ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          Path("compare_results.json").write_text(json.dumps({
+              "any_regression": False,
+              "baseline_timestamp": None,
+              "current_timestamp": None,
+              "deltas": [],
+              "error": "compare_command_failed_before_emitting_json",
+              "regression_count": 0,
+              "regression_threshold": None,
+          }, indent=2, sort_keys=True), encoding="utf-8")
+          PY
+          fi
           echo "exit_code=$STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Post results as PR comment

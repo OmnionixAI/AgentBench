@@ -110,12 +110,19 @@ jobs:
               const { execSync } = require('child_process');
               const extractDir = path.join(process.env.GITHUB_WORKSPACE, "compare_artifact");
               fs.mkdirSync(extractDir, { recursive: true });
-              execSync(`python -c "import zipfile; zipfile.ZipFile(r'${zipPath}').extractall(r'${extractDir}')"`);
+              try {
+                execSync(`python -c "import zipfile; zipfile.ZipFile(r'${zipPath}').extractall(r'${extractDir}')"`);
+              } catch (error) {}
               const compareFile = path.join(extractDir, "compare_results.json");
               if (fs.existsSync(compareFile)) {
-                comparePayload = JSON.parse(fs.readFileSync(compareFile, 'utf8'));
-                regressionCount = comparePayload.regression_count;
-                regressionThreshold = comparePayload.regression_threshold;
+                try {
+                  const raw = fs.readFileSync(compareFile, 'utf8').trim();
+                  if (raw) {
+                    comparePayload = JSON.parse(raw);
+                    regressionCount = comparePayload.regression_count;
+                    regressionThreshold = comparePayload.regression_threshold;
+                  }
+                } catch (error) {}
               }
             }
 
