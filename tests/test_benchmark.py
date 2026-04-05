@@ -464,6 +464,32 @@ class AgentBenchSmokeTests(unittest.TestCase):
             self.assertIn('"verification_status": "verified"', leaderboard_payload)
             self.assertIn('"verified": true', leaderboard_payload)
 
+    def test_validate_submissions_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            submissions_dir = Path(temp_dir) / "submissions"
+            submissions_dir.mkdir(parents=True, exist_ok=True)
+            (submissions_dir / "bad.json").write_text('{"agent": {"name": "Broken"}}', encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "validate-submissions",
+                    "--submissions-dir",
+                    str(submissions_dir),
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn('"invalid": 1', completed.stdout)
+            self.assertIn("Missing required agent fields", completed.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

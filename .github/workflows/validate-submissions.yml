@@ -1,0 +1,44 @@
+name: validate-submissions
+
+on:
+  pull_request:
+    paths:
+      - "leaderboard/submissions/**"
+      - "src/agentbench/**"
+      - "README.md"
+      - "LEADERBOARD.md"
+      - ".github/workflows/validate-submissions.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "leaderboard/submissions/**"
+      - "src/agentbench/**"
+      - "README.md"
+      - "LEADERBOARD.md"
+      - ".github/workflows/validate-submissions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install AgentBench
+        run: python -m pip install -e .
+
+      - name: Validate leaderboard submissions
+        run: |
+          agentbench validate-submissions \
+            --submissions-dir leaderboard/submissions \
+            --json

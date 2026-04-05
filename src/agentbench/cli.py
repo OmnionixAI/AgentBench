@@ -5,7 +5,14 @@ from pathlib import Path
 
 from agentbench import __version__
 from agentbench.console import banner, dump_json, key_value_block, latest_summary_path, render_table
-from agentbench.leaderboard import build_leaderboard, create_submission, read_signing_secret, save_submission, serve_leaderboard
+from agentbench.leaderboard import (
+    build_leaderboard,
+    create_submission,
+    read_signing_secret,
+    save_submission,
+    serve_leaderboard,
+    validate_submissions_dir,
+)
 from agentbench.runner import load_suite, prepare_task, render_summary_markdown, run_suite
 from agentbench.scaffold import write_python_adapter_template
 from agentbench.security import verify_submission
@@ -100,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--submission", type=Path, required=True)
     verify_parser.add_argument("--signing-key-env", required=True)
     verify_parser.add_argument("--json", action="store_true")
+
+    validate_parser = subparsers.add_parser("validate-submissions", help="Validate leaderboard submission files.")
+    validate_parser.add_argument("--submissions-dir", type=Path, default=DEFAULT_SUBMISSIONS)
+    validate_parser.add_argument("--signing-key-env", help="Environment variable containing the leaderboard verification secret.")
+    validate_parser.add_argument("--json", action="store_true")
 
     return parser
 
@@ -333,6 +345,17 @@ def cmd_verify_submission(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_validate_submissions(args) -> int:
+    payload = validate_submissions_dir(args.submissions_dir, signing_secret=read_signing_secret(args.signing_key_env))
+    if args.json:
+        print(dump_json(payload))
+    else:
+        print(banner("Omnionix AgentBench", "Submission validation"))
+        print()
+        print(key_value_block({"Submissions": payload["count"], "Valid": payload["valid"], "Invalid": payload["invalid"]}))
+    return 0 if payload["invalid"] == 0 else 1
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -354,4 +377,6 @@ def main() -> int:
         return cmd_serve_leaderboard(args)
     if args.command == "verify-submission":
         return cmd_verify_submission(args)
+    if args.command == "validate-submissions":
+        return cmd_validate_submissions(args)
     raise SystemExit(f"Unsupported command: {args.command}")

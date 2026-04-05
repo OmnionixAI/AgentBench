@@ -196,6 +196,18 @@ The repo includes a GitHub Actions workflow that rebuilds the site on every push
 
 Once merged to `main`, the workflow regenerates `leaderboard/site/` and deploys it to Pages.
 
+### 5. Validate submissions in PRs
+
+The repo also includes a `validate-submissions` workflow so incoming leaderboard entries are checked before merge. The seamless public path is:
+
+1. Run the benchmark.
+2. Generate a submission with `agentbench submit`.
+3. Commit the JSON into `leaderboard/submissions/`.
+4. Open a PR.
+5. Let `validate-submissions` pass.
+6. Merge to `main`.
+7. Let `publish-leaderboard` deploy the update.
+
 ## Why this helps standardization
 
 - Public submissions reduce one-off screenshot claims.

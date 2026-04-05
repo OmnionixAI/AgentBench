@@ -159,6 +159,19 @@ To enable it:
 
 After that, the workflow rebuilds and redeploys the leaderboard whenever relevant changes land.
 
+## Seamless submission flow
+
+The intended public flow is:
+
+1. Benchmark your agent.
+2. Run `agentbench submit`.
+3. Add the generated JSON file to `leaderboard/submissions/`.
+4. Open a pull request.
+5. GitHub Actions runs `validate-submissions`.
+6. Merge to `main`.
+7. GitHub Actions runs `publish-leaderboard`.
+8. The live leaderboard updates automatically.
+
 ## Submission tips
 
 - Use the default benchmark suite unless you are clearly documenting a custom one.

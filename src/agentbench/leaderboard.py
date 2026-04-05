@@ -24,6 +24,10 @@ REQUIRED_AGENT_FIELDS = [
 ]
 
 
+class SubmissionValidationError(ValueError):
+    """Raised when a leaderboard submission is malformed or incomplete."""
+
+
 def create_submission(summary_path: Path, metadata: dict[str, Any]) -> dict[str, Any]:
     summary = read_json(summary_path)
     agent = metadata["agent"]
@@ -103,11 +107,79 @@ def save_submission(submission: dict[str, Any], submissions_dir: Path) -> Path:
     return path
 
 
+def validate_submission(submission: dict[str, Any], signing_secret: str | None = None) -> dict[str, Any]:
+    missing = [field for field in REQUIRED_AGENT_FIELDS if not str(submission.get("agent", {}).get(field, "")).strip()]
+    if missing:
+        raise SubmissionValidationError(f"Missing required agent fields: {', '.join(missing)}")
+
+    if not str(submission.get("submission_id", "")).strip():
+        raise SubmissionValidationError("Missing submission_id.")
+
+    run = submission.get("run")
+    if not isinstance(run, dict):
+        raise SubmissionValidationError("Missing run block.")
+
+    benchmark = run.get("benchmark")
+    if not isinstance(benchmark, dict):
+        raise SubmissionValidationError("Missing run.benchmark block.")
+
+    if not str(benchmark.get("suite_name", "")).strip():
+        raise SubmissionValidationError("Missing run.benchmark.suite_name.")
+    if not str(benchmark.get("suite_version", "")).strip():
+        raise SubmissionValidationError("Missing run.benchmark.suite_version.")
+    if not str(benchmark.get("suite_fingerprint", "")).strip():
+        raise SubmissionValidationError("Missing run.benchmark.suite_fingerprint.")
+
+    verification = submission.get("verification")
+    if not isinstance(verification, dict):
+        raise SubmissionValidationError("Missing verification block.")
+    if not str(verification.get("summary_hash", "")).strip():
+        raise SubmissionValidationError("Missing verification.summary_hash.")
+    if not str(verification.get("reproducibility_hash", "")).strip():
+        raise SubmissionValidationError("Missing verification.reproducibility_hash.")
+
+    if "averages" not in run or not isinstance(run.get("averages"), dict):
+        raise SubmissionValidationError("Missing run.averages block.")
+
+    verified_signature, verification_reason = verify_submission(submission, signing_secret)
+    verification_status = "verified" if verified_signature else verification.get("verification_status", "community")
+    if verification_status not in {"community", "signed", "verified"}:
+        raise SubmissionValidationError(f"Unsupported verification status: {verification_status}")
+
+    return {
+        "submission_id": submission["submission_id"],
+        "agent_name": submission["agent"]["name"],
+        "verified": verified_signature or bool(verification.get("verified")),
+        "verification_status": verification_status,
+        "verification_reason": verification_reason,
+    }
+
+
+def validate_submissions_dir(submissions_dir: Path, signing_secret: str | None = None) -> dict[str, Any]:
+    results = []
+    for path in sorted(submissions_dir.glob("*.json")) if submissions_dir.exists() else []:
+        try:
+            submission = read_json(path)
+            details = validate_submission(submission, signing_secret=signing_secret)
+            results.append({"path": str(path), "valid": True, **details})
+        except Exception as exc:
+            results.append({"path": str(path), "valid": False, "error": str(exc)})
+
+    invalid = [result for result in results if not result["valid"]]
+    return {
+        "count": len(results),
+        "valid": len(results) - len(invalid),
+        "invalid": len(invalid),
+        "results": results,
+    }
+
+
 def build_leaderboard(submissions_dir: Path, output_dir: Path, signing_secret: str | None = None) -> Path:
     ensure_dir(output_dir)
-    submissions = _load_submissions(submissions_dir)
+    submissions = _load_submissions(submissions_dir, strict=True)
     rows = []
     for submission in submissions:
+        validate_submission(submission, signing_secret=signing_secret)
         verified_signature, verification_reason = verify_submission(submission, signing_secret)
         averages = submission["run"]["averages"]
         verification_status = "verified" if verified_signature else submission.get("verification", {}).get("verification_status", "community")
@@ -185,7 +257,7 @@ def serve_leaderboard(submissions_dir: Path, output_dir: Path, host: str, port: 
         server.server_close()
 
 
-def _load_submissions(submissions_dir: Path) -> list[dict[str, Any]]:
+def _load_submissions(submissions_dir: Path, strict: bool = False) -> list[dict[str, Any]]:
     if not submissions_dir.exists():
         return []
     submissions = []
@@ -193,6 +265,8 @@ def _load_submissions(submissions_dir: Path) -> list[dict[str, Any]]:
         try:
             submissions.append(read_json(path))
         except Exception:
+            if strict:
+                raise
             continue
     return submissions
 
