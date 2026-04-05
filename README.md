@@ -114,7 +114,7 @@ agentbench submit ^
   --agent-name "Omnionix Reference Agent" ^
   --agent-version "1.4.2" ^
   --organization "Omnionix" ^
-  --creator "Josh Verma" ^
+  --creator "OmnionixAI" ^
   --framework "custom-cli" ^
   --model "gpt-5.2" ^
   --runtime "python" ^
