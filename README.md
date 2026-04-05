@@ -6,8 +6,9 @@ Omnionix AgentBench is a production-oriented benchmark harness for AI agents. It
 
 - First-class `Agentic Reliability` tasks for persistent memory, state drift, and resumed handoffs.
 - First-class `MCP` tasks in the default release suite.
-- A public leaderboard pipeline with validated submissions, explicit agent identity, reproducibility hashes, and track breakdowns.
+- A public leaderboard pipeline with validated submissions, explicit agent identity, reproducibility hashes, signed attestations, and track breakdowns.
 - Dynamic leaderboard site generation plus live serving with automatic refresh.
+- A GitHub Actions publishing path so the public leaderboard rebuilds automatically when new submissions are merged.
 - Family- and tag-level track slices so agents can be compared on `mcp`, `reliability`, `long-session`, `workflow`, `coding`, and `data`.
 
 ## Quick Start
@@ -123,6 +124,41 @@ Every submission stores:
 - reproducibility hash
 - family and tag track scores
 
+### Signed submissions
+
+Maintainers can sign a submission so the leaderboard can distinguish community entries from verified attestations:
+
+```bash
+$env:LEADERBOARD_SIGNING_KEY="replace-with-your-secret"
+agentbench submit ^
+  --summary runs/latest/summary.json ^
+  --submissions-dir leaderboard/submissions ^
+  --agent-name "Omnionix Reference Agent" ^
+  --agent-version "0.2.9" ^
+  --organization "Omnionix" ^
+  --creator "Josh Verma" ^
+  --framework "custom-cli" ^
+  --model "gpt-5.2" ^
+  --runtime "python" ^
+  --integration "agent-exec" ^
+  --signing-key-env LEADERBOARD_SIGNING_KEY ^
+  --key-id "omnionix-main"
+```
+
+You can verify a signed artifact locally:
+
+```bash
+agentbench verify-submission ^
+  --submission leaderboard/submissions/example.json ^
+  --signing-key-env LEADERBOARD_SIGNING_KEY
+```
+
+Verification statuses shown on the leaderboard:
+
+- `community`: unsigned community submission
+- `signed`: signed artifact without a verification key loaded by the site builder
+- `verified`: signature checked successfully during leaderboard generation
+
 ### 2. Build the leaderboard
 
 ```bash
@@ -142,11 +178,22 @@ agentbench serve-leaderboard
 
 The site auto-refreshes and shows exactly which agent you are looking at: name, version, organization, creator, framework, model, runtime, links, verification status, and reproducibility hash.
 
+### 4. Publish it automatically
+
+The repo includes a GitHub Actions workflow that rebuilds the site on every push affecting `leaderboard/submissions/` or the leaderboard codepath. To enable verified publishing:
+
+1. Turn on GitHub Pages for the repository and use GitHub Actions as the source.
+2. Add a repository secret named `LEADERBOARD_SIGNING_KEY`.
+3. Commit submissions into `leaderboard/submissions/`.
+
+Once merged to `main`, the workflow regenerates `leaderboard/site/` and deploys it to Pages.
+
 ## Why this helps standardization
 
 - Public submissions reduce one-off screenshot claims.
 - Explicit agent identity prevents anonymous leaderboard entries.
 - Reproducibility hashes help separate real runs from unverifiable marketing.
+- Signed attestations make it harder to spoof a leaderboard row without maintainer participation.
 - Reliability and long-session tracks stop one-shot optimization from dominating the ranking.
 - MCP tracks make tool-using agents comparable on a standardized interface.
 

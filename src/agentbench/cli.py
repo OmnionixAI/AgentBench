@@ -5,9 +5,10 @@ from pathlib import Path
 
 from agentbench import __version__
 from agentbench.console import banner, dump_json, key_value_block, latest_summary_path, render_table
-from agentbench.leaderboard import build_leaderboard, create_submission, save_submission, serve_leaderboard
+from agentbench.leaderboard import build_leaderboard, create_submission, read_signing_secret, save_submission, serve_leaderboard
 from agentbench.runner import load_suite, prepare_task, render_summary_markdown, run_suite
 from agentbench.scaffold import write_python_adapter_template
+from agentbench.security import verify_submission
 from agentbench.utils import read_json
 
 
@@ -78,11 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
     submit_parser.add_argument("--website")
     submit_parser.add_argument("--source-url")
     submit_parser.add_argument("--verified", action="store_true")
+    submit_parser.add_argument("--signing-key-env", help="Environment variable containing the submission signing secret.")
+    submit_parser.add_argument("--key-id", default="maintainer", help="Key identifier recorded in the submission signature.")
     submit_parser.add_argument("--json", action="store_true")
 
     build_lb_parser = subparsers.add_parser("build-leaderboard", help="Build the public leaderboard site and JSON.")
     build_lb_parser.add_argument("--submissions-dir", type=Path, default=DEFAULT_SUBMISSIONS)
     build_lb_parser.add_argument("--output-dir", type=Path, default=DEFAULT_LEADERBOARD_SITE)
+    build_lb_parser.add_argument("--signing-key-env", help="Environment variable containing the leaderboard verification secret.")
     build_lb_parser.add_argument("--json", action="store_true")
 
     serve_lb_parser = subparsers.add_parser("serve-leaderboard", help="Serve a dynamic leaderboard that refreshes from submissions.")
@@ -90,6 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve_lb_parser.add_argument("--output-dir", type=Path, default=DEFAULT_LEADERBOARD_SITE)
     serve_lb_parser.add_argument("--host", default="127.0.0.1")
     serve_lb_parser.add_argument("--port", type=int, default=8765)
+    serve_lb_parser.add_argument("--signing-key-env", help="Environment variable containing the leaderboard verification secret.")
+
+    verify_parser = subparsers.add_parser("verify-submission", help="Verify a signed submission.")
+    verify_parser.add_argument("--submission", type=Path, required=True)
+    verify_parser.add_argument("--signing-key-env", required=True)
+    verify_parser.add_argument("--json", action="store_true")
 
     return parser
 
@@ -267,6 +277,10 @@ def cmd_submit(args) -> int:
                 "source_url": args.source_url,
             },
             "verified": args.verified,
+            "signing": {
+                "secret": read_signing_secret(args.signing_key_env),
+                "key_id": args.key_id,
+            },
         },
     )
     path = save_submission(submission, args.submissions_dir)
@@ -280,7 +294,11 @@ def cmd_submit(args) -> int:
 
 
 def cmd_build_leaderboard(args) -> int:
-    output = build_leaderboard(args.submissions_dir, args.output_dir)
+    output = build_leaderboard(
+        args.submissions_dir,
+        args.output_dir,
+        signing_secret=read_signing_secret(args.signing_key_env),
+    )
     if args.json:
         print(dump_json({"leaderboard_json": str(output), "site": str(args.output_dir / 'index.html')}))
     else:
@@ -292,8 +310,27 @@ def cmd_build_leaderboard(args) -> int:
 
 def cmd_serve_leaderboard(args) -> int:
     print(banner("Omnionix AgentBench", f"Serving leaderboard on http://{args.host}:{args.port}"))
-    serve_leaderboard(args.submissions_dir, args.output_dir, args.host, args.port)
+    serve_leaderboard(
+        args.submissions_dir,
+        args.output_dir,
+        args.host,
+        args.port,
+        signing_secret=read_signing_secret(args.signing_key_env),
+    )
     return 0
+
+
+def cmd_verify_submission(args) -> int:
+    submission = read_json(args.submission)
+    ok, reason = verify_submission(submission, read_signing_secret(args.signing_key_env))
+    payload = {"valid": ok, "reason": reason, "submission_id": submission.get("submission_id")}
+    if args.json:
+        print(dump_json(payload))
+    else:
+        print(banner("Omnionix AgentBench", "Submission verification"))
+        print()
+        print(key_value_block(payload))
+    return 0 if ok else 1
 
 
 def main() -> int:
@@ -315,4 +352,6 @@ def main() -> int:
         return cmd_build_leaderboard(args)
     if args.command == "serve-leaderboard":
         return cmd_serve_leaderboard(args)
+    if args.command == "verify-submission":
+        return cmd_verify_submission(args)
     raise SystemExit(f"Unsupported command: {args.command}")

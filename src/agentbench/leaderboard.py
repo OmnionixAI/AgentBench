@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 from agentbench import __version__
+from agentbench.security import sign_submission, verify_submission
 from agentbench.utils import ensure_dir, read_json, stable_hash, write_json
 
 
@@ -47,7 +49,7 @@ def create_submission(summary_path: Path, metadata: dict[str, Any]) -> dict[str,
         }
     )[:16]
 
-    return {
+    submission = {
         "submission_id": submission_id,
         "submitted_at": submission_time,
         "agent": agent,
@@ -74,6 +76,7 @@ def create_submission(summary_path: Path, metadata: dict[str, Any]) -> dict[str,
                 }
             ),
             "verified": bool(metadata.get("verified", False)),
+            "verification_status": "community",
         },
         "benchmark_card": {
             "reliability": summary.get("averages", {}).get("reliability"),
@@ -85,6 +88,12 @@ def create_submission(summary_path: Path, metadata: dict[str, Any]) -> dict[str,
             "cost_efficiency": summary.get("finops", {}).get("avg_efficiency_score"),
         },
     }
+    signing = metadata.get("signing", {})
+    signing_key = signing.get("secret")
+    if signing_key:
+        submission["verification"]["verification_status"] = "signed"
+        submission = sign_submission(submission, signing_key, key_id=signing.get("key_id", "maintainer"))
+    return submission
 
 
 def save_submission(submission: dict[str, Any], submissions_dir: Path) -> Path:
@@ -94,12 +103,14 @@ def save_submission(submission: dict[str, Any], submissions_dir: Path) -> Path:
     return path
 
 
-def build_leaderboard(submissions_dir: Path, output_dir: Path) -> Path:
+def build_leaderboard(submissions_dir: Path, output_dir: Path, signing_secret: str | None = None) -> Path:
     ensure_dir(output_dir)
     submissions = _load_submissions(submissions_dir)
     rows = []
     for submission in submissions:
+        verified_signature, verification_reason = verify_submission(submission, signing_secret)
         averages = submission["run"]["averages"]
+        verification_status = "verified" if verified_signature else submission.get("verification", {}).get("verification_status", "community")
         rows.append(
             {
                 "submission_id": submission["submission_id"],
@@ -127,7 +138,10 @@ def build_leaderboard(submissions_dir: Path, output_dir: Path) -> Path:
                 "data": submission["benchmark_card"].get("data"),
                 "long_session": submission["benchmark_card"].get("long_session"),
                 "cost_efficiency": submission["benchmark_card"].get("cost_efficiency"),
-                "verified": submission["verification"]["verified"],
+                "verified": verified_signature or submission["verification"]["verified"],
+                "verification_status": verification_status,
+                "verification_reason": verification_reason,
+                "key_id": submission.get("verification", {}).get("signature", {}).get("key_id"),
                 "suite_version": submission["run"]["benchmark"]["suite_version"],
                 "suite_fingerprint": submission["run"]["benchmark"]["suite_fingerprint"],
                 "submitted_at": submission["submitted_at"],
@@ -151,8 +165,8 @@ def build_leaderboard(submissions_dir: Path, output_dir: Path) -> Path:
     return json_path
 
 
-def serve_leaderboard(submissions_dir: Path, output_dir: Path, host: str, port: int) -> None:
-    build_leaderboard(submissions_dir, output_dir)
+def serve_leaderboard(submissions_dir: Path, output_dir: Path, host: str, port: int, signing_secret: str | None = None) -> None:
+    build_leaderboard(submissions_dir, output_dir, signing_secret=signing_secret)
     output_dir = output_dir.resolve()
 
     class Handler(SimpleHTTPRequestHandler):
@@ -161,7 +175,7 @@ def serve_leaderboard(submissions_dir: Path, output_dir: Path, host: str, port: 
 
         def do_GET(self):
             if self.path in ("/", "/index.html", "/leaderboard.json"):
-                build_leaderboard(submissions_dir, output_dir)
+                build_leaderboard(submissions_dir, output_dir, signing_secret=signing_secret)
             return super().do_GET()
 
     server = ThreadingHTTPServer((host, port), Handler)
@@ -181,6 +195,12 @@ def _load_submissions(submissions_dir: Path) -> list[dict[str, Any]]:
         except Exception:
             continue
     return submissions
+
+
+def read_signing_secret(env_name: str | None) -> str | None:
+    if not env_name:
+        return None
+    return os.getenv(env_name)
 
 
 def _family_average(summary: dict[str, Any], family: str) -> float | None:
@@ -341,7 +361,8 @@ def _leaderboard_html() -> str:
           <td data-label="Consistency" class="metric">${metric(row.consistency)}</td>
           <td data-label="Cost Efficiency" class="metric">${metric(row.cost_efficiency)}</td>
           <td data-label="Verification">
-            <div class="${row.verified ? "verified" : "unverified"}">${row.verified ? "Verified" : "Community"}</div>
+            <div class="${row.verified ? "verified" : "unverified"}">${row.verification_status || (row.verified ? "verified" : "community")}</div>
+            <div style="color:#98abc7;font-size:12px;">${row.key_id ? `key ${row.key_id}` : row.verification_reason}</div>
             <div style="color:#98abc7;font-size:12px;">${row.reproducibility_hash.slice(0, 12)}</div>
           </td>
         `;

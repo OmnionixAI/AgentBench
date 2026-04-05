@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
-import os
 from argparse import Namespace
 from pathlib import Path
 
@@ -342,6 +342,127 @@ class AgentBenchSmokeTests(unittest.TestCase):
             self.assertIn("Reference Agent", leaderboard_payload)
             self.assertIn("gpt-test", leaderboard_payload)
             self.assertIn("Public Leaderboard", index_html)
+
+    def test_signed_submission_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "runs"
+            submissions_dir = Path(temp_dir) / "submissions"
+            site_dir = Path(temp_dir) / "site"
+            signed_env = {**ENV, "AGENTBENCH_TEST_SIGNING_KEY": "super-secret-key"}
+            run_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "run",
+                    "--output-dir",
+                    str(output_dir),
+                    "--task",
+                    "reliability.resume_handoff",
+                    "--seed",
+                    "17",
+                    "--agent-python",
+                    "examples/agents/reference_agent.py",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=signed_env,
+            )
+            self.assertEqual(run_completed.returncode, 0, run_completed.stderr)
+
+            summary_path = output_dir / "latest" / "summary.json"
+            submit_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "submit",
+                    "--summary",
+                    str(summary_path),
+                    "--submissions-dir",
+                    str(submissions_dir),
+                    "--agent-name",
+                    "Reference Agent Signed",
+                    "--agent-version",
+                    "0.2.9",
+                    "--organization",
+                    "Omnionix",
+                    "--creator",
+                    "Josh Verma",
+                    "--framework",
+                    "custom-cli",
+                    "--model",
+                    "gpt-test",
+                    "--runtime",
+                    "python",
+                    "--integration",
+                    "agent-python",
+                    "--signing-key-env",
+                    "AGENTBENCH_TEST_SIGNING_KEY",
+                    "--key-id",
+                    "test-maintainer",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=signed_env,
+            )
+            self.assertEqual(submit_completed.returncode, 0, submit_completed.stderr)
+            submission_file = next(submissions_dir.glob("*.json"))
+            submission_payload = submission_file.read_text(encoding="utf-8")
+            self.assertIn('"signature"', submission_payload)
+            self.assertIn('"key_id": "test-maintainer"', submission_payload)
+
+            verify_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "verify-submission",
+                    "--submission",
+                    str(submission_file),
+                    "--signing-key-env",
+                    "AGENTBENCH_TEST_SIGNING_KEY",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=signed_env,
+            )
+            self.assertEqual(verify_completed.returncode, 0, verify_completed.stderr)
+            self.assertIn('"valid": true', verify_completed.stdout)
+
+            build_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "build-leaderboard",
+                    "--submissions-dir",
+                    str(submissions_dir),
+                    "--output-dir",
+                    str(site_dir),
+                    "--signing-key-env",
+                    "AGENTBENCH_TEST_SIGNING_KEY",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=signed_env,
+            )
+            self.assertEqual(build_completed.returncode, 0, build_completed.stderr)
+            leaderboard_payload = (site_dir / "leaderboard.json").read_text(encoding="utf-8")
+            self.assertIn('"verification_status": "verified"', leaderboard_payload)
+            self.assertIn('"verified": true', leaderboard_payload)
 
 
 if __name__ == "__main__":

@@ -8,5 +8,4 @@ build/
 dist/
 *.egg-info/
 runs/
-leaderboard/submissions/
 leaderboard/site/
