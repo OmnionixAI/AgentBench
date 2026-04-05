@@ -2,6 +2,11 @@
 
 Omnionix AgentBench is a production-oriented benchmark harness for AI agents. It evaluates code repair, data workflows, tool orchestration, MCP tool use, long-session memory drift, resumed-session reliability, and public reproducibility instead of relying on one-shot answer-only prompts.
 
+Helpful docs:
+
+- [Leaderboard Guide](C:/JV/AgentBench/LEADERBOARD.md)
+- [Contributing Guide](C:/JV/AgentBench/CONTRIBUTING.md)
+
 ## What `0.2.9` adds
 
 - First-class `Agentic Reliability` tasks for persistent memory, state drift, and resumed handoffs.
