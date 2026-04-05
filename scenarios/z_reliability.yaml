@@ -1,0 +1,27 @@
+suite:
+  name: "Omnionix AgentBench Reliability"
+  version: "0.2.7"
+  description: "Long-session reliability scenarios for persistent memory, state drift, and resumed handoffs."
+
+tasks:
+  - id: reliability.memory_refresh
+    title: "Retain only the latest session facts"
+    family: agentic_reliability
+    scenario: memory_refresh
+    difficulty: hard
+    description: "Track corrections across a long session and keep a clean persistent memory snapshot."
+    tags: [reliability, memory, long-session]
+    default_seeds: [11, 29, 47]
+    budget:
+      max_runtime_seconds: 90
+
+  - id: reliability.resume_handoff
+    title: "Resume safely from a stale checkpoint"
+    family: agentic_reliability
+    scenario: resume_handoff
+    difficulty: hard
+    description: "Merge stale checkpoint memory with resumed turns and avoid state drift."
+    tags: [reliability, memory, resumption]
+    default_seeds: [17, 37, 59]
+    budget:
+      max_runtime_seconds: 90

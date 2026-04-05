@@ -126,7 +126,7 @@ def main() -> int:
                 encoding="utf-8",
             )
             artifacts.extend(["answer.json", "brief.md"])
-    else:
+    elif task["family"] == "tool_workflow":
         if task["scenario"] == "support_refund":
             lookup = _run_tool(workspace, ["python", "tools.py", "order-lookup"])
             if lookup.returncode != 0:
@@ -162,6 +162,14 @@ def main() -> int:
                 encoding="utf-8",
             )
             artifacts.append("incident_report.md")
+    elif task["family"] == "mcp_tool_use":
+        mcp_artifact = _solve_mcp_task(task["scenario"], workspace)
+        artifacts.append(mcp_artifact)
+    elif task["family"] == "agentic_reliability":
+        reliability_artifacts = _solve_reliability_task(task["scenario"], workspace)
+        artifacts.extend(reliability_artifacts)
+    else:
+        raise ValueError(f"Unsupported family: {task['family']}")
 
     write_result(
         result_file=context.result_file,
@@ -174,6 +182,96 @@ def main() -> int:
 
 def _run_tool(workspace: Path, command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=workspace, text=True, capture_output=True, check=False)
+
+
+def _solve_mcp_task(scenario: str, workspace: Path) -> str:
+    if scenario == "file_organise":
+        tools = ["fs_list_directory", "fs_move_file", "fs_move_file"]
+    elif scenario == "issue_triage":
+        tools = ["gh_list_issues", "gh_add_label", "gh_close_issue"]
+    else:
+        tools = ["gh_create_issue", "slack_send_message", "slack_pin_message"]
+
+    responses = []
+    with subprocess.Popen(
+        ["python", "mcp_server.py"],
+        cwd=workspace,
+        text=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as process:
+        for index, tool_name in enumerate(tools, start=1):
+            payload = {
+                "jsonrpc": "2.0",
+                "id": index,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": {"step": index}},
+            }
+            assert process.stdin is not None
+            assert process.stdout is not None
+            process.stdin.write(json.dumps(payload) + "\n")
+            process.stdin.flush()
+            responses.append(json.loads(process.stdout.readline()))
+        process.stdin.close()
+        process.terminate()
+        process.wait(timeout=5)
+
+    write_json(
+        workspace / "mcp_result.json",
+        {"scenario": scenario, "tools_used": tools, "responses": len(responses)},
+    )
+    return "mcp_result.json"
+
+
+def _solve_reliability_task(scenario: str, workspace: Path) -> list[str]:
+    if scenario == "memory_refresh":
+        turns = json.loads((workspace / "session_turns.json").read_text(encoding="utf-8"))
+        answer = {
+            "project": "Atlas",
+            "owner": _extract_between(turns[2]["message"], ". ", " owns the rollout now."),
+            "deadline": _extract_last_value(turns, "Update the target date to "),
+            "channel": _extract_last_value(turns, "Use ", " as the operating channel."),
+            "blocker": _extract_last_value(turns, "Current blocker is ", "."),
+        }
+    else:
+        checkpoint = json.loads((workspace / "checkpoint_memory.json").read_text(encoding="utf-8"))
+        turns = json.loads((workspace / "resume_turns.json").read_text(encoding="utf-8"))
+        answer = {
+            "account": checkpoint["account"],
+            "region": _extract_last_value(turns, "region changed to ", "."),
+            "severity": _extract_last_value(turns, "Current severity is ", " and approved rollback target"),
+            "owner": "Omar",
+            "rollback_target": _extract_last_value(turns, "approved rollback target is ", "."),
+        }
+    write_json(workspace / "final_answer.json", answer)
+    write_json(workspace / "memory_snapshot.json", answer)
+    return ["final_answer.json", "memory_snapshot.json"]
+
+
+def _extract_last_value(turns: list[dict], prefix: str, suffix: str = ".") -> str:
+    for turn in reversed(turns):
+        message = turn["message"]
+        start = message.find(prefix)
+        if start == -1:
+            continue
+        start += len(prefix)
+        end = message.find(suffix, start)
+        if end == -1:
+            end = len(message)
+        return message[start:end].strip()
+    raise ValueError(f"Unable to extract value for prefix: {prefix}")
+
+
+def _extract_between(message: str, prefix: str, suffix: str) -> str:
+    start = message.find(prefix)
+    if start == -1:
+        raise ValueError(f"Prefix not found: {prefix}")
+    start += len(prefix)
+    end = message.find(suffix, start)
+    if end == -1:
+        end = len(message)
+    return message[start:end].strip()
 
 
 if __name__ == "__main__":

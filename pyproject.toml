@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentbench"
-version = "0.2.0"
+version = "0.2.7"
 description = "Omnionix AgentBench: a dynamic benchmark harness for evaluating AI agents."
 readme = "README.md"
 requires-python = ">=3.11"

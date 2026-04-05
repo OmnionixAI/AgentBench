@@ -301,6 +301,8 @@ def build_summary(suite: SuiteSpec, suite_path: Path, run_dir: Path, results: li
 
 
 def render_summary_markdown(summary: dict) -> str:
+    dimensions = list(summary["suite"]["weights"].keys())
+    dimension_headers = [dimension.replace("_", " ").title() for dimension in dimensions]
     lines = [
         f"# {summary['suite']['name']}",
         "",
@@ -316,22 +318,19 @@ def render_summary_markdown(summary: dict) -> str:
         "",
         "## Task Results",
         "",
-        "| Task | Seed | Passed | Overall | Success | Safety | Recovery | Efficiency | Calibration | Duration |",
-        "| --- | ---: | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Task | Seed | Passed | Overall | " + " | ".join(dimension_headers) + " | Duration |",
+        "| --- | ---: | :---: | ---: | " + " | ".join("---:" for _ in dimension_headers) + " | ---: |",
     ]
     for task in summary["tasks"]:
         scores = task["scores"]
+        rendered_dimensions = [_display_score(scores.get(dimension)) for dimension in dimensions]
         lines.append(
-            "| {task_id} | {seed} | {passed} | {overall} | {success} | {safety} | {recovery} | {efficiency} | {calibration} | {duration_seconds} |".format(
+            "| {task_id} | {seed} | {passed} | {overall} | {dimensions} | {duration_seconds} |".format(
                 task_id=task["task_id"],
                 seed=task["seed"],
                 passed="yes" if task["passed"] else "no",
                 overall=task["overall"],
-                success=_display_score(scores.get("success")),
-                safety=_display_score(scores.get("safety")),
-                recovery=_display_score(scores.get("recovery")),
-                efficiency=_display_score(scores.get("efficiency")),
-                calibration=_display_score(scores.get("calibration")),
+                dimensions=" | ".join(str(value) for value in rendered_dimensions),
                 duration_seconds=task["duration_seconds"],
             )
         )

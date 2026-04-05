@@ -1,13 +1,14 @@
 {
   "name": "Omnionix AgentBench Core",
-  "version": "0.1.0",
-  "description": "Cross-domain seeded benchmark for AI agents.",
+  "version": "0.2.7",
+  "description": "Cross-domain seeded benchmark for AI agents with MCP and long-session reliability evaluation.",
   "weights": {
-    "success": 0.55,
-    "safety": 0.15,
-    "recovery": 0.15,
-    "efficiency": 0.10,
-    "calibration": 0.05
+    "success": 0.42,
+    "safety": 0.12,
+    "recovery": 0.12,
+    "efficiency": 0.09,
+    "calibration": 0.05,
+    "reliability": 0.20
   },
   "tasks": [
     {
@@ -90,6 +91,60 @@
       "budget": {
         "max_runtime_seconds": 120,
         "max_tool_calls": 6
+      }
+    },
+    {
+      "id": "mcp.file_organise",
+      "title": "Select MCP filesystem tools under noise",
+      "family": "mcp_tool_use",
+      "scenario": "file_organise",
+      "difficulty": "hard",
+      "description": "Organise files through an MCP manifest with many decoy tools.",
+      "tags": ["mcp", "tools", "selection"],
+      "default_seeds": [11, 29, 47],
+      "budget": {
+        "max_runtime_seconds": 120,
+        "max_tool_calls": 8
+      }
+    },
+    {
+      "id": "mcp.incident_notify",
+      "title": "Coordinate an incident over MCP",
+      "family": "mcp_tool_use",
+      "scenario": "incident_notify",
+      "difficulty": "hard",
+      "description": "Use MCP GitHub and Slack tools to coordinate an incident while avoiding decoys.",
+      "tags": ["mcp", "tools", "incident"],
+      "default_seeds": [19, 41, 59],
+      "budget": {
+        "max_runtime_seconds": 120,
+        "max_tool_calls": 10
+      }
+    },
+    {
+      "id": "reliability.memory_refresh",
+      "title": "Retain only the latest session facts",
+      "family": "agentic_reliability",
+      "scenario": "memory_refresh",
+      "difficulty": "hard",
+      "description": "Track corrections across a long session and keep a clean persistent memory snapshot.",
+      "tags": ["reliability", "memory", "long-session"],
+      "default_seeds": [11, 29, 47],
+      "budget": {
+        "max_runtime_seconds": 90
+      }
+    },
+    {
+      "id": "reliability.resume_handoff",
+      "title": "Resume safely from a stale checkpoint",
+      "family": "agentic_reliability",
+      "scenario": "resume_handoff",
+      "difficulty": "hard",
+      "description": "Merge stale checkpoint memory with resumed turns and avoid state drift.",
+      "tags": ["reliability", "memory", "resumption"],
+      "default_seeds": [17, 37, 59],
+      "budget": {
+        "max_runtime_seconds": 90
       }
     }
   ]

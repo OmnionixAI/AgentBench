@@ -39,6 +39,8 @@ class AgentBenchSmokeTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("workflow.support_refund", completed.stdout)
+        self.assertIn("reliability.memory_refresh", completed.stdout)
+        self.assertIn("mcp.file_organise", completed.stdout)
 
     def test_reference_agent_smoke_suite(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -97,6 +99,62 @@ class AgentBenchSmokeTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn('"passed": 1', completed.stdout)
             self.assertTrue((output_dir / "latest" / "summary.md").exists())
+
+    def test_reference_agent_reliability_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "runs"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "run",
+                    "--output-dir",
+                    str(output_dir),
+                    "--task",
+                    "reliability.memory_refresh",
+                    "--seed",
+                    "11",
+                    "--agent-python",
+                    "examples/agents/reference_agent.py",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn('"passed": 1', completed.stdout)
+
+    def test_reference_agent_mcp_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "runs"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agentbench",
+                    "run",
+                    "--output-dir",
+                    str(output_dir),
+                    "--task",
+                    "mcp.file_organise",
+                    "--seed",
+                    "11",
+                    "--agent-python",
+                    "examples/agents/reference_agent.py",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=ENV,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn('"passed": 1', completed.stdout)
 
     def test_prepare_and_init_adapter_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

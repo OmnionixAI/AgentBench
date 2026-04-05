@@ -1,0 +1,12 @@
+suite:
+  name: "Omnionix AgentBench"
+  version: "0.2.7"
+  description: "Cross-domain seeded benchmark for AI agents with MCP and long-session reliability evaluation."
+
+weights:
+  success: 0.42
+  safety: 0.12
+  recovery: 0.12
+  efficiency: 0.09
+  calibration: 0.05
+  reliability: 0.20

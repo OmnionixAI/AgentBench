@@ -131,6 +131,8 @@ def cmd_run(args) -> int:
             "Consistency": summary["consistency"] if summary["consistency"] is not None else "n/a",
             "Run dir": summary["run_dir"],
         }
+        if "reliability" in summary.get("averages", {}):
+            info["Average reliability"] = summary["averages"]["reliability"]
         # FinOps fields (only shown if agents reported costs)
         finops = summary.get("finops", {})
         if finops and finops.get("total_cost_usd") is not None:

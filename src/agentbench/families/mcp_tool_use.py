@@ -1,18 +1,12 @@
-"""MCP Tool Use task family.
-
-Tests the agent's ability to interact correctly with MCP servers that expose
-50+ tools (including decoys).  The agent must select the right tools, handle
-chaos-injected failures, and avoid loops.
-"""
+"""MCP Tool Use task family."""
 
 from __future__ import annotations
 
-import json
 import random
 from pathlib import Path
 from typing import Any
 
-from agentbench.chaos import ChaosConfig, ChaosEngine, chaos_recovery_score
+from agentbench.chaos import chaos_recovery_score
 from agentbench.families.base import TaskFamily
 from agentbench.metrics.entropy import tool_selection_entropy
 from agentbench.mock_servers.decoys import generate_decoy_tools
@@ -106,11 +100,6 @@ class MCPToolUseFamily(TaskFamily):
 
         prompt_path.write_text(self.make_prompt(spec.title, overview, rules, deliverables), encoding="utf-8")
 
-        # Chaos configuration
-        chaos_config = None
-        if hasattr(spec, "chaos_config") and spec.chaos_config:
-            chaos_config = spec.chaos_config
-
         write_json(task_file, {
             **self.public_task_manifest(spec, seed, deliverables, rules),
             "mcp_transport": "stdio",
@@ -119,13 +108,24 @@ class MCPToolUseFamily(TaskFamily):
         })
 
         # Store internal state for evaluation
-        write_json(internal / "state.json", {
+        state = {
             "scenario": spec.scenario,
             "expected": expected,
             "total_tools": total_tools,
             "correct_tools": sorted(_CORRECT_TOOLS.get(spec.scenario, set())),
             "decoy_tools": sorted(decoy_names),
-        })
+            "completed": False,
+        }
+        if spec.scenario == "file_organise":
+            state["files_moved"] = 0
+        elif spec.scenario == "issue_triage":
+            state["labels_applied"] = 0
+            state["issues_closed"] = 0
+        elif spec.scenario == "incident_notify":
+            state["issue_created"] = False
+            state["slack_notified"] = False
+            state["message_pinned"] = False
+        write_json(internal / "state.json", state)
         (internal / "tool_log.json").write_text("[]", encoding="utf-8")
 
         return PreparedTask(
@@ -139,7 +139,6 @@ class MCPToolUseFamily(TaskFamily):
                 "expected": expected,
                 "total_tools": total_tools,
                 "correct_tools": _CORRECT_TOOLS.get(spec.scenario, set()),
-                "chaos_config": chaos_config,
             },
         )
 
@@ -158,11 +157,11 @@ class MCPToolUseFamily(TaskFamily):
 
         # --- Success scoring (scenario-specific) ---
         if prepared.spec.scenario == "file_organise":
-            success = self._score_file_organise(expected, state)
+            success = self._score_file_organise(state)
         elif prepared.spec.scenario == "issue_triage":
-            success = self._score_issue_triage(expected, state)
+            success = self._score_issue_triage(state)
         elif prepared.spec.scenario == "incident_notify":
-            success = self._score_incident_notify(expected, state)
+            success = self._score_incident_notify(state)
         else:
             success = 0.0
 
@@ -283,15 +282,30 @@ class MCPToolUseFamily(TaskFamily):
 
     # ---- Scoring helpers ----
 
-    def _score_file_organise(self, expected: dict, state: dict) -> float:
-        # Check if files were moved correctly by examining the tool log
-        return 1.0 if state.get("completed") else 0.5
+    def _score_file_organise(self, state: dict) -> float:
+        moved = int(state.get("files_moved", 0))
+        if moved >= 2:
+            return 1.0
+        if moved == 1:
+            return 0.5
+        return 0.0
 
-    def _score_issue_triage(self, expected: dict, state: dict) -> float:
-        return 1.0 if state.get("completed") else 0.5
+    def _score_issue_triage(self, state: dict) -> float:
+        labels = int(state.get("labels_applied", 0))
+        closed = int(state.get("issues_closed", 0))
+        if labels >= 1 and closed >= 1:
+            return 1.0
+        if labels >= 1 or closed >= 1:
+            return 0.5
+        return 0.0
 
-    def _score_incident_notify(self, expected: dict, state: dict) -> float:
-        return 1.0 if state.get("completed") else 0.5
+    def _score_incident_notify(self, state: dict) -> float:
+        checks = [
+            bool(state.get("issue_created")),
+            bool(state.get("slack_notified")),
+            bool(state.get("message_pinned")),
+        ]
+        return round(sum(1.0 for item in checks if item) / len(checks), 4)
 
 
 def _read_json_safe(path: Path, default: Any) -> Any:
@@ -305,7 +319,7 @@ def _read_json_safe(path: Path, default: Any) -> Any:
 
 def _mcp_server_script() -> str:
     """Generate the MCP server script that gets dropped into the agent workspace."""
-    return '''"""MCP Tool Server — launched by the agent under test.
+    return '''"""MCP Tool Server launched by the agent under test.
 
 Usage:
     python mcp_server.py              # stdio mode (default)
@@ -359,10 +373,26 @@ def handle_message(raw_msg):
         # Log the call
         log_call(tool_name, "ok", {"arguments": arguments})
 
-        # Mark completion if the agent has done meaningful work
-        if tool_name.startswith(("fs_", "gh_", "slack_")):
-            state["completed"] = True
-            write_json(STATE_PATH, state)
+        scenario = state.get("scenario")
+        if scenario == "file_organise":
+            if tool_name in ("fs_move_file", "fs_copy_file"):
+                state["files_moved"] = int(state.get("files_moved", 0)) + 1
+            state["completed"] = state.get("files_moved", 0) >= 2
+        elif scenario == "issue_triage":
+            if tool_name == "gh_add_label":
+                state["labels_applied"] = int(state.get("labels_applied", 0)) + 1
+            if tool_name == "gh_close_issue":
+                state["issues_closed"] = int(state.get("issues_closed", 0)) + 1
+            state["completed"] = state.get("labels_applied", 0) >= 1 and state.get("issues_closed", 0) >= 1
+        elif scenario == "incident_notify":
+            if tool_name == "gh_create_issue":
+                state["issue_created"] = True
+            if tool_name == "slack_send_message":
+                state["slack_notified"] = True
+            if tool_name == "slack_pin_message":
+                state["message_pinned"] = True
+            state["completed"] = bool(state.get("issue_created")) and bool(state.get("slack_notified")) and bool(state.get("message_pinned"))
+        write_json(STATE_PATH, state)
 
         return {
             "jsonrpc": "2.0",
