@@ -168,8 +168,8 @@ The intended public flow is:
 3. Add the generated JSON file to `leaderboard/submissions/`.
 4. Open a pull request.
 5. GitHub Actions runs `validate-submissions`.
-6. Maintainers optionally sign or attest trusted submissions.
-7. Merge to `main`.
+6. If the PR only contains valid submission JSON files, GitHub Actions can auto-merge it as a community entry.
+7. Maintainers optionally sign or attest trusted submissions for the verified lane.
 8. GitHub Actions runs `publish-leaderboard`.
 9. The live leaderboard updates automatically.
 

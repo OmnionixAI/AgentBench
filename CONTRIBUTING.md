@@ -99,6 +99,8 @@ If you change submission format or verification behavior, update:
 - [LEADERBOARD.md](C:/JV/AgentBench/LEADERBOARD.md)
 - relevant tests in [test_benchmark.py](C:/JV/AgentBench/tests/test_benchmark.py)
 
+Submission-only PRs under `leaderboard/submissions/` may be auto-merged after validation, so changes in that lane should remain narrow, deterministic, and data-only.
+
 ## Code style
 
 - prefer simple standard-library solutions where possible

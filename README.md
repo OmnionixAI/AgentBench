@@ -211,9 +211,9 @@ The repo also includes a `validate-submissions` workflow so incoming leaderboard
 3. Commit the JSON into `leaderboard/submissions/`.
 4. Open a PR.
 5. Let `validate-submissions` pass.
-6. Maintainers optionally sign or attest trusted submissions.
-7. Merge to `main`.
-8. Let `publish-leaderboard` deploy the update.
+6. If the PR only contains valid submission JSON files, `auto-merge-submissions` can merge it automatically as a community entry.
+7. Maintainers optionally sign or attest trusted submissions for the verified lane.
+8. `publish-leaderboard` deploys the update.
 
 Outside contributors do not need the repository signing secret. Unsigned submissions can still be accepted and appear as `community`, while maintainer-attested submissions can appear as `verified`.
 
