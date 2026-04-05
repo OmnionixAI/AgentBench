@@ -1,9 +1,12 @@
 # Omnionix AgentBench
 
+[![Leaderboard](https://img.shields.io/badge/Leaderboard-Live%20Rankings-0f766e?style=for-the-badge)](https://omnionixai.github.io/AgentBench/)
+
 Omnionix AgentBench is a production-oriented benchmark harness for AI agents. It evaluates code repair, data workflows, tool orchestration, MCP tool use, long-session memory drift, resumed-session reliability, and public reproducibility instead of relying on one-shot answer-only prompts.
 
 Helpful docs:
 
+- [Live Leaderboard](https://omnionixai.github.io/AgentBench/)
 - [Leaderboard Guide](C:/JV/AgentBench/LEADERBOARD.md)
 - [Contributing Guide](C:/JV/AgentBench/CONTRIBUTING.md)
 
