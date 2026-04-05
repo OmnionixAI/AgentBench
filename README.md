@@ -255,6 +255,12 @@ Notes:
 - the command exits with code `1` when regressions are detected, which makes it CI-friendly
 - `--json` emits machine-readable deltas for automation
 
+GitHub Actions also runs this automatically through [eval.yml](C:/JV/AgentBench/.github/workflows/eval.yml):
+
+- pull requests benchmark the current branch and compare against the latest successful `main` baseline artifact
+- pushes to `main` refresh the stored baseline artifact
+- scheduled runs track regression drift over time
+
 ## Debugging
 
 Prepare a single episode:

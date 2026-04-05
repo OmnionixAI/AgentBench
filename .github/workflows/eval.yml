@@ -3,6 +3,10 @@ name: AgentBench Evaluation
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       suite:
@@ -13,8 +17,13 @@ on:
         description: "Agent executable command"
         required: false
         default: "python examples/agents/reference_agent.py"
+      compare_threshold:
+        description: "Regression threshold for cross-run compare"
+        required: false
+        default: "0.05"
 
 permissions:
+  actions: read
   contents: read
   pull-requests: write
 
@@ -22,7 +31,7 @@ jobs:
   evaluate:
     name: Run AgentBench Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -46,10 +55,96 @@ jobs:
           agentbench run \
             --suite "$SUITE" \
             --agent-exec "$AGENT" \
-            --json > benchmark_results.json 2>&1 || true
-          echo "results<<EOF" >> $GITHUB_OUTPUT
-          cat benchmark_results.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+            --json > benchmark_results.json
+          python - <<'PY'
+          import json
+          import shutil
+          from pathlib import Path
+
+          payload = json.loads(Path("benchmark_results.json").read_text(encoding="utf-8"))
+          run_dir = Path(payload["run_dir"])
+          shutil.copy2(run_dir / "summary.json", Path("benchmark_summary.json"))
+          PY
+          echo "results<<EOF" >> "$GITHUB_OUTPUT"
+          cat benchmark_results.json >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Find latest successful main baseline
+        id: baseline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflow_id = "eval.yml";
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id,
+              branch: "main",
+              status: "completed",
+              per_page: 100,
+            });
+            const baselineRun = runs.find((run) => run.conclusion === "success" && run.id !== context.runId);
+            if (!baselineRun) {
+              core.setOutput("found", "false");
+              return;
+            }
+
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: baselineRun.id,
+              per_page: 100,
+            });
+            const artifact = artifacts.find((item) => item.name === "agentbench-summary");
+            if (!artifact) {
+              core.setOutput("found", "false");
+              return;
+            }
+
+            core.setOutput("found", "true");
+            core.setOutput("run_id", String(baselineRun.id));
+            core.setOutput("created_at", baselineRun.created_at);
+            core.setOutput("artifact_url", artifact.archive_download_url);
+
+      - name: Download baseline summary artifact
+        if: steps.baseline.outputs.found == 'true'
+        env:
+          ARTIFACT_URL: ${{ steps.baseline.outputs.artifact_url }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -L \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$ARTIFACT_URL" \
+            -o baseline_summary.zip
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          with zipfile.ZipFile("baseline_summary.zip") as archive:
+            archive.extractall("baseline_summary")
+
+          extracted = sorted(Path("baseline_summary").rglob("*.json"))
+          if not extracted:
+            raise SystemExit("No JSON summary found in downloaded artifact.")
+          if extracted[0].name != "benchmark_summary.json":
+            raise SystemExit(f"Unexpected artifact payload: {extracted[0]}")
+          PY
+
+      - name: Compare against baseline
+        if: steps.baseline.outputs.found == 'true'
+        id: compare
+        run: |
+          THRESHOLD="${{ github.event.inputs.compare_threshold || '0.05' }}"
+          set +e
+          agentbench compare \
+            --baseline baseline_summary/benchmark_summary.json \
+            --current benchmark_summary.json \
+            --threshold "$THRESHOLD" \
+            --json > compare_results.json
+          STATUS=$?
+          set -e
+          echo "exit_code=$STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Post results as PR comment
         if: github.event_name == 'pull_request'
@@ -73,7 +168,7 @@ jobs:
             let finopsSection = '';
             if (results.finops?.total_cost_usd != null) {
               finopsSection = `
-            ### 💰 FinOps
+            ### FinOps
             | Metric | Value |
             |---|---|
             | Total Cost | $${results.finops.total_cost_usd.toFixed(6)} |
@@ -81,16 +176,32 @@ jobs:
             | Efficiency Score | ${results.finops.avg_efficiency_score ?? 'n/a'} |`;
             }
 
-            const body = `## 🏋️ AgentBench Results
+            let compareSection = '';
+            try {
+              if (fs.existsSync('compare_results.json')) {
+                const comparison = JSON.parse(fs.readFileSync('compare_results.json', 'utf8'));
+                compareSection = `
+            ### Cross-Run Compare
+            | Metric | Value |
+            |---|---|
+            | Baseline Run | ${comparison.baseline_timestamp} |
+            | Current Run | ${comparison.current_timestamp} |
+            | Threshold | ${comparison.regression_threshold} |
+            | Regressions Detected | ${comparison.regression_count} |`;
+              }
+            } catch (e) {}
+
+            const body = `## AgentBench Results
 
             | Metric | Value |
             |---|---|
             | Episodes | ${episodes} |
-            | ✅ Passed | ${passed} |
-            | ❌ Failed | ${failed} |
+            | Passed | ${passed} |
+            | Failed | ${failed} |
             | Average Overall | ${(overall * 100).toFixed(1)}% |
             | Consistency | ${consistency} |
             ${finopsSection}
+            ${compareSection}
 
             <details>
             <summary>Full JSON results</summary>
@@ -104,7 +215,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: body
+              body,
             });
 
       - name: Upload results artifact
@@ -112,3 +223,23 @@ jobs:
         with:
           name: agentbench-results
           path: benchmark_results.json
+
+      - name: Upload summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbench-summary
+          path: benchmark_summary.json
+
+      - name: Upload comparison artifact
+        if: steps.baseline.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbench-compare
+          path: compare_results.json
+
+      - name: Fail on regression
+        if: steps.baseline.outputs.found == 'true' && steps.compare.outputs.exit_code != '0'
+        run: |
+          echo "Cross-run regression detected."
+          cat compare_results.json
+          exit 1
