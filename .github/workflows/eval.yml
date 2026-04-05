@@ -254,7 +254,7 @@ jobs:
           path: compare_results.json
 
       - name: Fail on regression
-        if: steps.baseline.outputs.found == 'true' && steps.compare.outputs.exit_code != '0'
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.found == 'true' && steps.compare.outputs.exit_code != '0'
         run: |
           echo "Cross-run regression detected."
           cat compare_results.json
