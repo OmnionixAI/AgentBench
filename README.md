@@ -1,4 +1,4 @@
-# Omnionix AgentBench
+# Omnionix™ AgentBench
 
 [![Leaderboard](https://img.shields.io/badge/Leaderboard-Live%20Rankings-0f766e?style=for-the-badge)](https://omnionixai.github.io/AgentBench/)
 
